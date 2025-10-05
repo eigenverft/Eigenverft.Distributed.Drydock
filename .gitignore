@@ -421,3 +421,4 @@ FodyWeavers.xsd
 *[Ss][Ee][Cc][Rr][Ee][Tt]*
 /artifacts/**/*
 /reports/**/*
+/.github/workflows/.config/docfx/build/api/*

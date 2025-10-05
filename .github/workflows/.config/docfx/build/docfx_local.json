@@ -1,0 +1,42 @@
+{
+  "metadata": [
+    {
+      "noRestore": true,
+      "src": [
+        {
+          "src": "C:/dev/github.com/eigenverft/Eigenverft.Distributed.Drydock/source/Eigenverft.Distributed.Drydock/ProjectItems/Eigenverft.Distributed.Drydock",
+          "files": [
+            "**/*.csproj"
+          ]
+        }
+      ],
+      "dest": "api"
+    }
+  ],
+  "build": {
+    "content": [
+      {
+        "files": [
+          "**/*.{md,yml}"
+        ]
+      }
+    ],
+    "resource": [
+      {
+        "files": [
+          "images/**"
+        ]
+      }
+    ],
+    "output": "C:/dev/github.com/eigenverft/Eigenverft.Distributed.Drydock/reports/Eigenverft.Distributed.Drydock/feature/SETUPREPOSITORY/0.1.20255.46758/docfx",
+    "template": [
+      "statictoc",
+      "../_exported_templates/override"
+    ],
+    "globalMetadata": {
+      "_appName": "Eigenverft.Distributed.Drydock",
+      "_appTitle": "Eigenverft.Distributed.Drydock",
+      "_appFooter": "<pre></pre>"
+    }
+  }
+}

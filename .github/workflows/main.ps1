@@ -96,6 +96,7 @@ $outputRootReportResultsDirectory = New-DirectoryFromSegments -Paths @($topLevel
 $outputRootDocsResultsDirectory = New-DirectoryFromSegments -Paths @($topLevelDirectory, $docsOutputFolderName)
 $targetConfigAllowedLicenses = Join-Segments -Segments @($topLevelDirectory, ".github", "workflows", ".config", "nuget-license","allowed-licenses.json")
 $targetConfigLicensesMappings = Join-Segments -Segments @($topLevelDirectory, ".github", "workflows", ".config", "nuget-license", "licenses-mapping.json")
+$targetdocFx = Join-Segments -Segments @($topLevelDirectory, ".github", "workflows", ".config", "docfx", "build")
 
 
 if (-not $isCiCd) { Delete-FilesByPattern -Path "$outputRootArtifactsDirectory" -Pattern "*"  }
@@ -195,8 +196,9 @@ foreach ($projectFile in $solutionProjectsObj) {
             "outputDirectory"     = "$outputReportDirectory\docfx"
             "projfilebasename"     = "$($projectFile.BaseName)"
         }
-        Replace-FilePlaceholders -InputFile "$topLevelDirectory/.config/docfx/build/docfx_local_template.json" -OutputFile "$topLevelDirectory/.config/docfx/build/docfx_local.json" -Replacements $replacements
-        dotnet docfx "$topLevelDirectory/.config/docfx/build/docfx_local.json"
+        Replace-FilePlaceholders -InputFile "$targetdocFx/docfx_local_template.json" -OutputFile "$targetdocFx/docfx_local.json" -Replacements $replacements
+        Replace-FilePlaceholders -InputFile "$targetdocFx/index_template.md" -OutputFile "$targetdocFx/index.md" -Replacements $replacements
+        dotnet docfx "$targetdocFx/docfx_local.json"
     }
 
     #$fileItem = Get-Item -Path $targetSolutionThirdPartyNoticesFile
@@ -209,7 +211,7 @@ foreach ($projectFile in $solutionProjectsObj) {
     #git push origin $currentBranch
 }
 
-exit
+
 
 # Deploy ------------------------------------
 Write-Host "===> Deploying channel: '$($channelRoot.ToLower())' | Local: $($isLocal.ToString()) | CI/CD: $($isCiCd.ToString()) =======================" -ForegroundColor Green
@@ -243,7 +245,7 @@ foreach ($projectFile in $solutionProjectsObj) {
             $firstFileMatch = Get-ChildItem -Path $outputArtifactPackDirectory -Filter "*.nupkg" -File -Recurse | Select-Object -First 1
             if ($firstFileMatch) {
                 Write-Host "===> NuGet package found: '$($firstFileMatch.FullName)'. Proceeding with push..." -ForegroundColor Green
-                dotnet nuget add source --username carsten-riedel --password $NUGET_GITHUB_PUSH --store-password-in-clear-text --name github "https://nuget.pkg.github.com/carsten-riedel/index.json"
+                dotnet nuget add source --username eigenverft --password $NUGET_GITHUB_PUSH --store-password-in-clear-text --name github "https://nuget.pkg.github.com/eigenverft/index.json"
                 dotnet nuget push "$($firstFileMatch.FullName)" --api-key $NUGET_GITHUB_PUSH --source github
             }
             else {
@@ -273,7 +275,7 @@ foreach ($projectFile in $solutionProjectsObj) {
             $firstFileMatch = Get-ChildItem -Path $outputArtifactPackDirectory -Filter "*.nupkg" -File -Recurse | Select-Object -First 1
             if ($firstFileMatch) {
                 Write-Host "===> NuGet package found: '$($firstFileMatch.FullName)'. Proceeding with push..." -ForegroundColor Green
-                dotnet nuget add source --username carsten-riedel --password $NUGET_GITHUB_PUSH --store-password-in-clear-text --name github "https://nuget.pkg.github.com/carsten-riedel/index.json"
+                dotnet nuget add source --username eigenverft --password $NUGET_GITHUB_PUSH --store-password-in-clear-text --name github "https://nuget.pkg.github.com/eigenverft/index.json"
                 dotnet nuget push "$($firstFileMatch.FullName)" --api-key $NUGET_GITHUB_PUSH --source github
                 dotnet nuget push "$($firstFileMatch.FullName)" --api-key $NUGET_TEST_PAT --source https://apiint.nugettest.org/v3/index.json
             }
@@ -302,7 +304,7 @@ foreach ($projectFile in $solutionProjectsObj) {
             $firstFileMatch = Get-ChildItem -Path $outputArtifactPackDirectory -Filter "*.nupkg" -File -Recurse | Select-Object -First 1
             if ($firstFileMatch) {
                 Write-Host "===> NuGet package found: '$($firstFileMatch.FullName)'. Proceeding with push..." -ForegroundColor Green
-                dotnet nuget add source --username carsten-riedel --password $NUGET_GITHUB_PUSH --store-password-in-clear-text --name github "https://nuget.pkg.github.com/carsten-riedel/index.json"
+                dotnet nuget add source --username eigenverft --password $NUGET_GITHUB_PUSH --store-password-in-clear-text --name github "https://nuget.pkg.github.com/eigenverft/index.json"
                 dotnet nuget push "$($firstFileMatch.FullName)" --api-key $NUGET_GITHUB_PUSH --source github
                 dotnet nuget push "$($firstFileMatch.FullName)" --api-key $NUGET_TEST_PAT --source https://apiint.nugettest.org/v3/index.json
             }
@@ -332,7 +334,7 @@ foreach ($projectFile in $solutionProjectsObj) {
             $firstFileMatch = Get-ChildItem -Path $outputArtifactPackDirectory -Filter "*.nupkg" -File -Recurse | Select-Object -First 1
             if ($firstFileMatch) {
                 Write-Host "===> NuGet package found: '$($firstFileMatch.FullName)'. Proceeding with push..." -ForegroundColor Green
-                dotnet nuget add source --username carsten-riedel --password $NUGET_GITHUB_PUSH --store-password-in-clear-text --name github "https://nuget.pkg.github.com/carsten-riedel/index.json"
+                dotnet nuget add source --username eigenverft --password $NUGET_GITHUB_PUSH --store-password-in-clear-text --name github "https://nuget.pkg.github.com/eigenverft/index.json"
                 dotnet nuget push "$($firstFileMatch.FullName)" --api-key $NUGET_GITHUB_PUSH --source github
                 dotnet nuget push "$($firstFileMatch.FullName)" --api-key $NUGET_PAT --source https://api.nuget.org/v3/index.json
             }
