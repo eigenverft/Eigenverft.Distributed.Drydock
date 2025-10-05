@@ -1,3 +1,5 @@
+Write-Host "Entering main.ps1"
+
 param (
     [string]$NUGET_GITHUB_PUSH,
     [string]$NUGET_PAT,
