@@ -94,8 +94,8 @@ $docsOutputFolderName = "docs"
 $outputRootArtifactsDirectory = New-DirectoryFromSegments -Paths @($topLevelDirectory, $artifactsOutputFolderName)
 $outputRootReportResultsDirectory = New-DirectoryFromSegments -Paths @($topLevelDirectory, $reportsOutputFolderName)
 $outputRootDocsResultsDirectory = New-DirectoryFromSegments -Paths @($topLevelDirectory, $docsOutputFolderName)
-$targetConfigAllowedLicenses = Join-Segments -Segments @($topLevelDirectory, ".config", "allowed-licenses.json")
-$targetConfigLicensesMappings = Join-Segments -Segments @($topLevelDirectory, ".config", "licenses-mapping.json")
+$targetConfigAllowedLicenses = Join-Segments -Segments @($topLevelDirectory, ".github", "workflows", ".config", "nuget-license","allowed-licenses.json")
+$targetConfigLicensesMappings = Join-Segments -Segments @($topLevelDirectory, ".github", "workflows", ".config", "nuget-license", "licenses-mapping.json")
 
 
 if (-not $isCiCd) { Delete-FilesByPattern -Path "$outputRootArtifactsDirectory" -Pattern "*"  }
