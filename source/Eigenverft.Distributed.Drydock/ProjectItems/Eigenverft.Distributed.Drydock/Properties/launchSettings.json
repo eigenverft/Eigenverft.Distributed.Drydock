@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Eigenverft.Distributed.Drydock": {
+      "commandName": "Project",
+      "commandLineArgs": "sln --location C:\\dev\\github.com\\eigenverft\\Eigenverft.Distributed.Drydock\\source\\Eigenverft.Distributed.Drydock.sln --property IsPackable --scope inner"
+    }
+  }
+}
