@@ -1,11 +1,11 @@
-Write-Host "Entering main.ps1"
-
 param (
     [string]$NUGET_GITHUB_PUSH,
     [string]$NUGET_PAT,
     [string]$NUGET_TEST_PAT,
     [string]$POWERSHELL_GALLERY
 )
+
+Write-Host "Entering main.ps1"
 
 # If any of the parameters are empty, try loading them from a secrets file.
 if ([string]::IsNullOrEmpty($NUGET_GITHUB_PUSH) -or [string]::IsNullOrEmpty($NUGET_PAT) -or [string]::IsNullOrEmpty($NUGET_TEST_PAT) -or [string]::IsNullOrEmpty($POWERSHELL_GALLERY)) {
