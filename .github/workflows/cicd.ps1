@@ -111,9 +111,9 @@ $artifactsFolderName = "artifacts"
 $reportsFolderName = "reports"
 $docsFolderName = "docs"
 
-$artifactsFolder = New-Directory -Paths @("$gitTopLevelDirectory","$artifactsFolderName",$deploymentInfo.Branch.PathSegmentsSanitized,$probeGeneratedVersion.VersionFull)
-$reportsFolder = New-Directory -Paths @("$gitTopLevelDirectory","$reportsFolderName",$deploymentInfo.Branch.PathSegmentsSanitized,$probeGeneratedVersion.VersionFull)
-$docsFolder = New-Directory -Paths @("$gitTopLevelDirectory","$docsFolderName",$deploymentInfo.Branch.PathSegmentsSanitized,$probeGeneratedVersion.VersionFull)
+$artifactsFolder = New-Directory -Paths @("$gitTopLevelDirectory","$artifactsFolderName",$deploymentInfo.Branch.PathSegmentsSanitized,$generatedVersion.VersionFull)
+$reportsFolder = New-Directory -Paths @("$gitTopLevelDirectory","$reportsFolderName",$deploymentInfo.Branch.PathSegmentsSanitized,$generatedVersion.VersionFull)
+$docsFolder = New-Directory -Paths @("$gitTopLevelDirectory","$docsFolderName",$deploymentInfo.Branch.PathSegmentsSanitized,$generatedVersion.VersionFull)
 
 Write-Output "artifactsFolder to $artifactsFolder"
 Write-Output "reportsFolder to $reportsFolder"
