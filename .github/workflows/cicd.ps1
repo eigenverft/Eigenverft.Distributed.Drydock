@@ -106,14 +106,17 @@ Install-Module -Name BlackBytesBox.Manifested.Git -Repository "PSGallery" -Force
 . "$PSScriptRoot\psutility\common.ps1"
 . "$PSScriptRoot\psutility\dotnetlist.ps1"
 
+
 #Required directorys
+#$buildFolderName = Get-Path -Paths @("$gitTopLevelDirectory","build")
+$buildFolderName = "build"
 $artifactsFolderName = "artifacts"
 $reportsFolderName = "reports"
 $docsFolderName = "docs"
 
-$artifactsFolder = New-Directory -Paths @("$gitTopLevelDirectory","$artifactsFolderName",$deploymentInfo.Branch.PathSegmentsSanitized,$generatedVersion.VersionFull)
-$reportsFolder = New-Directory -Paths @("$gitTopLevelDirectory","$reportsFolderName",$deploymentInfo.Branch.PathSegmentsSanitized,$generatedVersion.VersionFull)
-$docsFolder = New-Directory -Paths @("$gitTopLevelDirectory","$docsFolderName",$deploymentInfo.Branch.PathSegmentsSanitized,$generatedVersion.VersionFull)
+$artifactsFolder = New-Directory -Paths @("$gitTopLevelDirectory","$buildFolderName","$artifactsFolderName",$deploymentInfo.Branch.PathSegmentsSanitized,$generatedVersion.VersionFull)
+$reportsFolder = New-Directory -Paths @("$gitTopLevelDirectory","$buildFolderName","$reportsFolderName",$deploymentInfo.Branch.PathSegmentsSanitized,$generatedVersion.VersionFull)
+$docsFolder = New-Directory -Paths @("$gitTopLevelDirectory","$buildFolderName","$docsFolderName",$deploymentInfo.Branch.PathSegmentsSanitized,$generatedVersion.VersionFull)
 
 Write-Output "artifactsFolder to $artifactsFolder"
 Write-Output "reportsFolder to $reportsFolder"
