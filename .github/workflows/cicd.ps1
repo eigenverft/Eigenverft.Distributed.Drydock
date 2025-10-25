@@ -61,9 +61,6 @@ Test-VariableValue -Variable { $PsGalleryApiKey } -ExitIfNullOrEmpty -HideValue
 if ($cmd = Test-CommandAvailable -Command "git") { Write-Host "Test-CommandAvailable: $($cmd.Name) $($cmd.Version) found at $($cmd.Source)" } else { Write-Error "git not found"; exit 1 }
 if ($cmd = Test-CommandAvailable -Command "dotnet") { Write-Host "Test-CommandAvailable: $($cmd.Name) $($cmd.Version) found at $($cmd.Source)" } else { Write-Error "dotnet not found"; exit 1 }
 
-# Enable the .NET tools specified in the manifest file
-Enable-TempDotnetTools -ManifestFile "$PSScriptRoot\.config\dotnet-tools\dotnet-tools.json" -NoReturn
-
 # Preload environment information
 $runEnvironment = Get-RunEnvironment
 $gitTopLevelDirectory = Get-GitTopLevelDirectory
@@ -97,6 +94,14 @@ $LocalPowershellGalleryName = Register-LocalPSGalleryRepository -RepositoryName 
 $LocalNugetSourceName = "LocalNuget"
 $LocalNugetSourceName = Register-LocalNuGetDotNetPackageSource -SourceName "$LocalNugetSourceName"
 
+$configFolderName = Get-Path -Paths @("$gitTopLevelDirectory",".github","workflows",".config")
+$dotnetToolsFileName = Get-Path -Paths @("$configFolderName","dotnet-tools","dotnet-tools.json")
+$nugetLicenseAllowedFileName = Get-Path -Paths @("$configFolderName","nuget-license","allowed-licenses.json")
+$nugetLicenseMappingFileName = Get-Path -Paths @("$configFolderName","nuget-license","licenses-mapping.json")
+
+# Enable the .NET tools specified in the manifest file
+Enable-TempDotnetTools -ManifestFile "$dotnetToolsFileName" -NoReturn
+
 ##############################################################################
 # Main CICD Logic
 
@@ -108,23 +113,120 @@ Install-Module -Name BlackBytesBox.Manifested.Git -Repository "PSGallery" -Force
 
 
 #Required directorys
-#$buildFolderName = Get-Path -Paths @("$gitTopLevelDirectory","build")
-$buildFolderName = "build"
-$artifactsFolderName = "artifacts"
-$reportsFolderName = "reports"
-$docsFolderName = "docs"
+$outputFolderName = Get-Path -Paths @("$gitTopLevelDirectory","output")
 
-$artifactsFolder = New-Directory -Paths @("$gitTopLevelDirectory","$buildFolderName","$artifactsFolderName",$deploymentInfo.Branch.PathSegmentsSanitized,$generatedVersion.VersionFull)
-$reportsFolder = New-Directory -Paths @("$gitTopLevelDirectory","$buildFolderName","$reportsFolderName",$deploymentInfo.Branch.PathSegmentsSanitized,$generatedVersion.VersionFull)
-$docsFolder = New-Directory -Paths @("$gitTopLevelDirectory","$buildFolderName","$docsFolderName",$deploymentInfo.Branch.PathSegmentsSanitized,$generatedVersion.VersionFull)
+$buildFolderName = Get-Path -Paths @("$outputFolderName","build")
+$packFolderName = Get-Path -Paths @("$outputFolderName","pack")
+$publishFolderName = Get-Path -Paths @("$outputFolderName","publish")
 
+$artifactsFolderName = Get-Path -Paths @("$outputFolderName","artifacts")
+$reportsFolderName =  Get-Path -Paths @("$outputFolderName","reports")
+$docsFolderName = Get-Path -Paths @("$outputFolderName","docs")
+
+$outputFolder = New-Directory -Paths @($outputFolderName)
+if (-not $($runEnvironment.IsCI)) { Remove-FilesByPattern -Path "$outputFolderName" -Pattern "*"  }
+
+$branchVersionFolderName = Get-Path -Paths @($deploymentInfo.Branch.PathSegmentsSanitized,$generatedVersion.VersionFull)
+$channelVersionFolderName = Get-Path -Paths @($deploymentInfo.Channel.Value,$generatedVersion.VersionFull)
+
+$buildFolder = New-Directory -Paths @($buildFolderName,$branchVersionFolderName)
+$packFolder = New-Directory -Paths @($packFolderName,$channelVersionFolderName)
+$publishFolder = New-Directory -Paths @($publishFolderName,$channelVersionFolderName)
+$artifactsFolder = New-Directory -Paths @($artifactsFolderName,$channelVersionFolderName)
+$reportsFolder = New-Directory -Paths @($reportsFolderName,$channelVersionFolderName)
+$docsFolder = New-Directory -Paths @($docsFolderName,$channelVersionFolderName)
+
+Write-Output "outputFolder to $outputFolder"
+Write-Output "buildFolder to $buildFolder"
+Write-Output "packFolder to $packFolder"
+Write-Output "publishFolder to $publishFolder"
 Write-Output "artifactsFolder to $artifactsFolder"
 Write-Output "reportsFolder to $reportsFolder"
 Write-Output "docsFolder to $docsFolder"
 
-if (-not $($runEnvironment.IsCI)) { Remove-FilesByPattern -Path "$artifactsFolder" -Pattern "*"  }
-if (-not $($runEnvironment.IsCI)) { Remove-FilesByPattern -Path "$reportsFolder" -Pattern "*"  }
-if (-not $($runEnvironment.IsCI)) { Remove-FilesByPattern -Path "$docsFolder" -Pattern "*"  }
+
+# Initialize the array to accumulate projects.
+$solutionFiles = Find-FilesByPattern -Path "$gitTopLevelDirectory\source" -Pattern "*.sln"
+$solutionProjects = @()
+foreach ($solutionFile in $solutionFiles) {
+    # all ready sorted by the bbdist
+    $currentProjects = Invoke-Exec -Executable "bbdist" -Arguments @( "sln", "--file", "$($solutionFile.FullName)")
+    $solutionProjects += $currentProjects
+}
+
+$solutionProjectsObj = $solutionProjects | ForEach-Object { Get-Item $_ }
+
+foreach ($projectFile in $solutionProjectsObj) {
+    Write-Host "$($projectFile)"
+}
+
+$commonProjectParameters = @(
+    "--verbosity",
+    "diag",
+    "-p:""Deterministic=true""",
+    "-p:""ContinuousIntegrationBuild=true""",
+    "-p:""VersionBuild=$($generatedVersion.VersionBuild)""",
+    "-p:""VersionMajor=$($generatedVersion.VersionMajor)""",
+    "-p:""VersionMinor=$($generatedVersion.VersionMinor)""",
+    "-p:""VersionRevision=$($generatedVersion.VersionRevision)""",
+    "-p:""VersionSuffix=$($deploymentInfo.Affix.Suffix)"""
+)
 
 
+foreach ($projectFile in $solutionProjectsObj) {
+
+    $isTestProject = Invoke-Exec -Executable "bbdist" -Arguments @("csproj", "--file", "$($projectFile.FullName)", "--property", "IsTestProject") -ReturnType Objects
+    $isPackable = Invoke-Exec -Executable "bbdist" -Arguments @("csproj", "--file", "$($projectFile.FullName)", "--property", "IsPackable") -ReturnType Objects
+    $isPublishable = Invoke-Exec -Executable "bbdist" -Arguments @("csproj", "--file", "$($projectFile.FullName)", "--property", "IsPublishable") -ReturnType Objects
+
+    Invoke-Exec -Executable "dotnet" -Arguments @("clean", """$($projectFile.FullName)""", "-c", "Release","-p:""Stage=clean""")  -CommonArguments $commonProjectParameters -CaptureOutput $false
+    Invoke-Exec -Executable "dotnet" -Arguments @("restore", """$($projectFile.FullName)""", "-p:""Stage=restore""")  -CommonArguments $commonProjectParameters -CaptureOutput $false
+    Invoke-Exec -Executable "dotnet" -Arguments @("build", """$($projectFile.FullName)""", "-c", "Release","-p:""Stage=build""")  -CommonArguments $commonProjectParameters -CaptureOutput $false
+
+    if (($isPackable -eq $true) -or ($isPublishable -eq $true))
+    {
+        $jsonOutputVulnerable = Invoke-Exec -Executable "dotnet" -Arguments @("list", "$($projectFile.FullName)", "package", "--vulnerable", "--format", "json")
+        New-DotnetVulnerabilitiesReport -jsonInput $jsonOutputVulnerable -OutputFile "$reportsFolder\ReportVulnerabilities.md" -OutputFormat markdown -ExitOnVulnerability $false
+    
+        $jsonOutputDeprecated = Invoke-Exec -Executable "dotnet" -Arguments @("list", "$($projectFile.FullName)", "package", "--deprecated", "--include-transitive", "--format", "json")
+        New-DotnetDeprecatedReport -jsonInput $jsonOutputDeprecated -OutputFile "$reportsFolder\ReportDeprecated.md" -OutputFormat markdown -IgnoreTransitivePackages $true -ExitOnDeprecated $false
+    
+        $jsonOutputOutdated = Invoke-Exec -Executable "dotnet" -Arguments @("list", "$($projectFile.FullName)", "package", "--outdated", "--include-transitive", "--format", "json")
+        New-DotnetOutdatedReport -jsonInput $jsonOutputOutdated -OutputFile "$reportsFolder\ReportOutdated.md" -OutputFormat markdown -IgnoreTransitivePackages $false
+    
+        $jsonOutputBom = Invoke-Exec -Executable "dotnet" -Arguments @("list", "$($projectFile.FullName)", "package", "--include-transitive", "--format", "json")
+        New-DotnetBillOfMaterialsReport -jsonInput $jsonOutputBom -OutputFile "$reportsFolder\ReportBillOfMaterials.md" -OutputFormat markdown -IgnoreTransitivePackages $true
+    
+        Invoke-Exec -Executable "nuget-license" -Arguments @("--input", "$($projectFile.FullName)", "--allowed-license-types", "$nugetLicenseAllowedFileName", "--output", "JsonPretty", "--licenseurl-to-license-mappings" ,"$nugetLicenseMappingFileName", "--file-output", "$reportsFolder/ReportProjectLicences.json" )
+        Generate-ThirdPartyNotices -LicenseJsonPath "$reportsFolder/ReportProjectLicences.json" -OutputPath "$reportsFolder\ReportThirdPartyNotices.txt"
+    }
+<#
+    if ($isTestProject -eq $true)
+    {
+        Invoke-Exec -Executable "dotnet" -Arguments @("test", "$($projectFile.FullName)", "-c", "Release","-p:""Stage=test""")  -CommonArguments $commonProjectParameters -CaptureOutput $false
+    }
+
+    if ($isPackable -eq $true)
+    {
+        Invoke-Exec -Executable "dotnet" -Arguments @("pack", "$($projectFile.FullName)", "-c", "Release","-p:""Stage=pack""")  -CommonArguments $commonProjectParameters -CaptureOutput $false
+    }
+
+    if ($isPublishable -eq $true)
+    {
+        Invoke-Exec -Executable "dotnet" -Arguments @("publish", "$($projectFile.FullName)", "-c", "Release","-p:""Stage=publish""")  -CommonArguments $commonProjectParameters -CaptureOutput $false
+    }
+
+    if ($isPackable -eq $true)
+    {
+        $replacements = @{
+            "sourceCodeDirectory" = "$($projectFile.DirectoryName)"
+            "outputDirectory"     = "$outputReportDirectory\docfx"
+            "projfilebasename"     = "$($projectFile.BaseName)"
+        }
+        Replace-FilePlaceholders -InputFile "$topLevelDirectory/.config/docfx/build/docfx_local_template.json" -OutputFile "$topLevelDirectory/.config/docfx/build/docfx_local.json" -Replacements $replacements
+        dotnet docfx "$topLevelDirectory/.config/docfx/build/docfx_local.json"
+    }
+#>
+
+}
 
