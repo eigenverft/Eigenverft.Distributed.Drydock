@@ -100,11 +100,6 @@
 	</PropertyGroup>
 
 	<PropertyGroup Condition="'$(Stage)' == 'pack'">
-
-		<OutputPackDir Condition="'$(OutputArtifactPackDirectory)' != ''">$(OutputArtifactPackDirectory)</OutputPackDir>
-		<OutputPackDir Condition="'$(OutputArtifactPackDirectory)' == ''">$(MSBuildThisFileDirectory)bin\Output\pack\$(AssemblyName)</OutputPackDir>
-		<PackageOutputPath>$(OutputPackDir)</PackageOutputPath>
-
 		<Authors>$(Branding)</Authors>
 		<Owners>$(Branding)</Owners>
 		<PackageId>$(AssemblyName)</PackageId>
@@ -131,9 +126,7 @@
 	<PropertyGroup Condition="'$(Stage)' == 'publish'">
 		<!-- Specify the target runtime; adjust as needed (e.g., win-x86, linux-x64) -->
 		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
-		<OutputPubDir Condition="'$(OutputArtifactPublishDirectory)' != ''">$(OutputArtifactPublishDirectory)</OutputPubDir>
-		<OutputPubDir Condition="'$(OutputArtifactPublishDirectory)' == ''">$(MSBuildThisFileDirectory)\bin\Output\publish\$(AssemblyName)</OutputPubDir>
-		<PublishDir>$(OutputPubDir)</PublishDir>
+
 
 		<SelfContained Condition="">true</SelfContained>
 		<!-- Enable single-file publish -->

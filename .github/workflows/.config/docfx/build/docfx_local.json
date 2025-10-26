@@ -1,4 +1,4 @@
-{
+﻿{
   "metadata": [
     {
       "noRestore": true,
@@ -28,7 +28,7 @@
         ]
       }
     ],
-    "output": "C:/dev/github.com/eigenverft/Eigenverft.Distributed.Drydock/reports/Eigenverft.Distributed.Drydock/feature/SETUPREPOSITORY/0.1.20255.46758/docfx",
+    "output": "C:/dev/github.com/eigenverft/Eigenverft.Distributed.Drydock/output/docs/development/0.1.20256.9535/docfx",
     "template": [
       "statictoc",
       "../_exported_templates/override"

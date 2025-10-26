@@ -34,8 +34,8 @@
       "../_exported_templates/override"
     ],
     "globalMetadata": {
-      "_appName": "{{projfilebasename}}",
-      "_appTitle": "{{projfilebasename}}",
+      "_appName": "{{appName}}",
+      "_appTitle": "{{appName}}",
       "_appFooter": "<pre></pre>"
     }
   }

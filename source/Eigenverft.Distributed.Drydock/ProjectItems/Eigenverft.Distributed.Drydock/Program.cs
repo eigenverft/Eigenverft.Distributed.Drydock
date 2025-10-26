@@ -36,7 +36,7 @@ namespace Eigenverft.Distributed.Drydock
                 services.Configure<ConsoleLifetimeOptions>(opts => opts.SuppressStatusMessages = true);
                 services.AddSingleton<ISolutionProjectService, SolutionProjectService>();
                 services.AddHostedService<CommandBackgroundService>();
-            }).UseSerilog(Log.Logger); ;
+            }).UseSerilog(Log.Logger);
 
             var app = builder.Build();
 

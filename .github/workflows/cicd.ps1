@@ -98,6 +98,8 @@ $configFolderName = Get-Path -Paths @("$gitTopLevelDirectory",".github","workflo
 $dotnetToolsFileName = Get-Path -Paths @("$configFolderName","dotnet-tools","dotnet-tools.json")
 $nugetLicenseAllowedFileName = Get-Path -Paths @("$configFolderName","nuget-license","allowed-licenses.json")
 $nugetLicenseMappingFileName = Get-Path -Paths @("$configFolderName","nuget-license","licenses-mapping.json")
+$docFxTemplateFileName = Get-Path -Paths @("$configFolderName","docfx","build","docfx_local_template.json")
+$docFxTemplateOutFileName = Get-Path -Paths @("$configFolderName","docfx","build","docfx_local.json")
 
 # Enable the .NET tools specified in the manifest file
 Enable-TempDotnetTools -ManifestFile "$dotnetToolsFileName" -NoReturn
@@ -105,21 +107,21 @@ Enable-TempDotnetTools -ManifestFile "$dotnetToolsFileName" -NoReturn
 ##############################################################################
 # Main CICD Logic
 
-Install-Module -Name BlackBytesBox.Manifested.Initialize -Repository "PSGallery" -Force -AllowClobber
-Install-Module -Name BlackBytesBox.Manifested.Git -Repository "PSGallery" -Force -AllowClobber
+#Install-Module -Name BlackBytesBox.Manifested.Initialize -Repository "PSGallery" -Force -AllowClobber
+#Install-Module -Name BlackBytesBox.Manifested.Git -Repository "PSGallery" -Force -AllowClobber
 
-. "$PSScriptRoot\psutility\common.ps1"
 . "$PSScriptRoot\psutility\dotnetlist.ps1"
-
 
 #Required directorys
 $outputFolderName = Get-Path -Paths @("$gitTopLevelDirectory","output")
 
 $buildFolderName = Get-Path -Paths @("$outputFolderName","build")
+$buildBinFolderName = Get-Path -Paths @("$buildFolderName","bin")
+$buildObjFolderName = Get-Path -Paths @("$buildFolderName","obj")
+
 $packFolderName = Get-Path -Paths @("$outputFolderName","pack")
 $publishFolderName = Get-Path -Paths @("$outputFolderName","publish")
 
-$artifactsFolderName = Get-Path -Paths @("$outputFolderName","artifacts")
 $reportsFolderName =  Get-Path -Paths @("$outputFolderName","reports")
 $docsFolderName = Get-Path -Paths @("$outputFolderName","docs")
 
@@ -129,10 +131,12 @@ if (-not $($runEnvironment.IsCI)) { Remove-FilesByPattern -Path "$outputFolderNa
 $branchVersionFolderName = Get-Path -Paths @($deploymentInfo.Branch.PathSegmentsSanitized,$generatedVersion.VersionFull)
 $channelVersionFolderName = Get-Path -Paths @($deploymentInfo.Channel.Value,$generatedVersion.VersionFull)
 
-$buildFolder = New-Directory -Paths @($buildFolderName,$branchVersionFolderName)
+$buildFolder = New-Directory -Paths @($buildFolderName)
+$buildBinFolder = New-Directory -Paths @($buildBinFolderName,$branchVersionFolderName)
+$buildObjFolder = New-Directory -Paths @($buildObjFolderName,$branchVersionFolderName)
+
 $packFolder = New-Directory -Paths @($packFolderName,$channelVersionFolderName)
 $publishFolder = New-Directory -Paths @($publishFolderName,$channelVersionFolderName)
-$artifactsFolder = New-Directory -Paths @($artifactsFolderName,$channelVersionFolderName)
 $reportsFolder = New-Directory -Paths @($reportsFolderName,$channelVersionFolderName)
 $docsFolder = New-Directory -Paths @($docsFolderName,$channelVersionFolderName)
 
@@ -140,7 +144,6 @@ Write-Output "outputFolder to $outputFolder"
 Write-Output "buildFolder to $buildFolder"
 Write-Output "packFolder to $packFolder"
 Write-Output "publishFolder to $publishFolder"
-Write-Output "artifactsFolder to $artifactsFolder"
 Write-Output "reportsFolder to $reportsFolder"
 Write-Output "docsFolder to $docsFolder"
 
@@ -169,9 +172,12 @@ $commonProjectParameters = @(
     "-p:""VersionMajor=$($generatedVersion.VersionMajor)""",
     "-p:""VersionMinor=$($generatedVersion.VersionMinor)""",
     "-p:""VersionRevision=$($generatedVersion.VersionRevision)""",
-    "-p:""VersionSuffix=$($deploymentInfo.Affix.Suffix)"""
+    "-p:""VersionSuffix=$($deploymentInfo.Affix.Suffix)""",
+    "-p:""BaseOutputPath=$($buildBinFolder)/""",
+    "-p:""IntermediateOutputPath=$($buildObjFolder)/"""
+    
+    
 )
-
 
 foreach ($projectFile in $solutionProjectsObj) {
 
@@ -198,9 +204,9 @@ foreach ($projectFile in $solutionProjectsObj) {
         New-DotnetBillOfMaterialsReport -jsonInput $jsonOutputBom -OutputFile "$reportsFolder\ReportBillOfMaterials.md" -OutputFormat markdown -IgnoreTransitivePackages $true
     
         Invoke-Exec -Executable "nuget-license" -Arguments @("--input", "$($projectFile.FullName)", "--allowed-license-types", "$nugetLicenseAllowedFileName", "--output", "JsonPretty", "--licenseurl-to-license-mappings" ,"$nugetLicenseMappingFileName", "--file-output", "$reportsFolder/ReportProjectLicences.json" )
-        Generate-ThirdPartyNotices -LicenseJsonPath "$reportsFolder/ReportProjectLicences.json" -OutputPath "$reportsFolder\ReportThirdPartyNotices.txt"
+        New-ThirdPartyNotice -LicenseJsonPath "$reportsFolder/ReportProjectLicences.json" -OutputPath "$reportsFolder\ReportThirdPartyNotices.txt"
     }
-<#
+
     if ($isTestProject -eq $true)
     {
         Invoke-Exec -Executable "dotnet" -Arguments @("test", "$($projectFile.FullName)", "-c", "Release","-p:""Stage=test""")  -CommonArguments $commonProjectParameters -CaptureOutput $false
@@ -208,25 +214,26 @@ foreach ($projectFile in $solutionProjectsObj) {
 
     if ($isPackable -eq $true)
     {
-        Invoke-Exec -Executable "dotnet" -Arguments @("pack", "$($projectFile.FullName)", "-c", "Release","-p:""Stage=pack""")  -CommonArguments $commonProjectParameters -CaptureOutput $false
+        Invoke-Exec -Executable "dotnet" -Arguments @("pack", "$($projectFile.FullName)", "-c", "Release","-p:""Stage=pack""","-p:""PackageOutputPath=$($packFolder)""")  -CommonArguments $commonProjectParameters -CaptureOutput $false
     }
 
     if ($isPublishable -eq $true)
     {
-        Invoke-Exec -Executable "dotnet" -Arguments @("publish", "$($projectFile.FullName)", "-c", "Release","-p:""Stage=publish""")  -CommonArguments $commonProjectParameters -CaptureOutput $false
+        Invoke-Exec -Executable "dotnet" -Arguments @("publish", "$($projectFile.FullName)", "-c", "Release","-p:""Stage=publish""","-p:""PublishDir=$($publishFolder)""")  -CommonArguments $commonProjectParameters -CaptureOutput $false
     }
 
+    
     if ($isPackable -eq $true)
     {
         $replacements = @{
-            "sourceCodeDirectory" = "$($projectFile.DirectoryName)"
-            "outputDirectory"     = "$outputReportDirectory\docfx"
-            "projfilebasename"     = "$($projectFile.BaseName)"
+            "sourceCodeDirectory" = "$($projectFile.DirectoryName.Replace('\','/'))"
+            "outputDirectory"     = ("$docsFolder\docfx").Replace('\','/')
+            "appName"     = "$($projectFile.BaseName)"
         }
-        Replace-FilePlaceholders -InputFile "$topLevelDirectory/.config/docfx/build/docfx_local_template.json" -OutputFile "$topLevelDirectory/.config/docfx/build/docfx_local.json" -Replacements $replacements
-        dotnet docfx "$topLevelDirectory/.config/docfx/build/docfx_local.json"
+        Convert-FilePlaceholders -InputFile "$docFxTemplateFileName" -OutputFile "$docFxTemplateOutFileName" -Replacements $replacements
+        Invoke-Exec -Executable "docfx" -Arguments @("$docFxTemplateOutFileName")  -CaptureOutput $false
     }
-#>
+    
 
 }
 
