@@ -131,13 +131,12 @@ $publishFolder = New-Directory -Paths @($publishFolderName,$channelVersionFolder
 $reportsFolder = New-Directory -Paths @($reportsFolderName,$channelVersionFolderName)
 $docsFolder = New-Directory -Paths @($docsFolderName,$channelVersionFolderName)
 
-Write-Output "outputFolder to $outputFolder"
-Write-Output "buildFolder to $buildFolder"
-Write-Output "packFolder to $packFolder"
-Write-Output "publishFolder to $publishFolder"
-Write-Output "reportsFolder to $reportsFolder"
-Write-Output "docsFolder to $docsFolder"
-
+Write-ConsoleLog -Message "OutputFolder is $outputFolder"
+Write-ConsoleLog -Message "BuildFolder is $buildFolder"
+Write-ConsoleLog -Message "PackFolder is $packFolder"
+Write-ConsoleLog -Message "PublishFolder is $publishFolder"
+Write-ConsoleLog -Message "ReportsFolder is $reportsFolder"
+Write-ConsoleLog -Message "DocsFolder is $docsFolder"
 
 # Initialize the array to accumulate projects.
 $solutionFiles = Find-FilesByPattern -Path "$gitTopLevelDirectory\source" -Pattern "*.sln"
@@ -222,7 +221,7 @@ foreach ($projectFile in $solutionProjectsObj) {
             "appName"     = "$($projectFile.BaseName)"
         }
         Convert-FilePlaceholders -InputFile "$docFxTemplateFileName" -OutputFile "$docFxTemplateOutFileName" -Replacements $replacements
-        Invoke-Exec -Executable "docfx" -Arguments @("$docFxTemplateOutFileName")  -CaptureOutput $false
+        Invoke-Exec -Executable "docfx" -Arguments @("$docFxTemplateOutFileName")  -CaptureOutput $false -CaptureOutputDump $true
     }
     
 
