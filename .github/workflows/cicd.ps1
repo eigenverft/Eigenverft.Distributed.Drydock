@@ -46,10 +46,6 @@ Test-PsGalleryPublishPrereqsOffline -ExitOnFailure
 # Clean up previous versions of the module to avoid conflicts in local PowerShell environments
 Uninstall-PreviousModuleVersions -ModuleName 'Eigenverft.Manifested.Drydock'
 
-# Import optional integration script if it exists
-Import-Script -File @("$PSScriptRoot\cicd.integration.ps1") -NormalizeSeparators
-Write-IntegrationMsg -Message "This function is defined in the optional integration script. That should be integrated into this main module script."
-
 # In the case the secrets are not passed as parameters, try to get them from the secrets file, local development or CI/CD environment
 $NUGET_GITHUB_PUSH = Get-ConfigValue -Check $NUGET_GITHUB_PUSH -FilePath (Join-Path $PSScriptRoot 'cicd.secrets.json') -Property 'NUGET_GITHUB_PUSH'
 $NUGET_PAT = Get-ConfigValue -Check $NUGET_PAT -FilePath (Join-Path $PSScriptRoot 'cicd.secrets.json') -Property 'NUGET_PAT'
@@ -106,11 +102,6 @@ Enable-TempDotnetTools -ManifestFile "$dotnetToolsFileName" -NoReturn
 
 ##############################################################################
 # Main CICD Logic
-
-#Install-Module -Name BlackBytesBox.Manifested.Initialize -Repository "PSGallery" -Force -AllowClobber
-#Install-Module -Name BlackBytesBox.Manifested.Git -Repository "PSGallery" -Force -AllowClobber
-
-. "$PSScriptRoot\psutility\dotnetlist.ps1"
 
 #Required directorys
 $outputFolderName = Get-Path -Paths @("$gitTopLevelDirectory","output")
