@@ -5,46 +5,6 @@
 		<Branding>Eigenverft</Branding>
 	</PropertyGroup>
 
-	<!-- Inline task to read the current process command line + simple parsed bits -->
-	<UsingTask TaskName="GetInvocationCommandLine" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
-		<ParameterGroup>
-			<CommandLine Output="true" />
-			<ExeName Output="true" />
-			<FirstArg Output="true" />
-		</ParameterGroup>
-		<Task>
-			<Using Namespace="System" />
-			<Using Namespace="System.IO" />
-			<Code Type="Fragment" Language="cs">
-				<![CDATA[
-        var args = Environment.GetCommandLineArgs();          // args[0] = executable path
-        var exeName = (args.Length > 0)
-          ? Path.GetFileNameWithoutExtension(args[0])
-          : string.Empty;
-        var firstArg = (args.Length > 1) ? args[1] : string.Empty;
-
-        CommandLine = Environment.CommandLine;
-        ExeName     = exeName ?? string.Empty;
-        FirstArg    = firstArg ?? string.Empty;
-      ]]>
-			</Code>
-		</Task>
-	</UsingTask>
-
-	<!-- Run early so properties are available -->
-	<Target Name="CaptureInvocation" BeforeTargets="Restore;Build;Pack;Publish;PublishOnly" Condition="'$(CallerCommandLine)'==''">
-		<GetInvocationCommandLine>
-			<Output TaskParameter="CommandLine" PropertyName="CallerCommandLine" />
-			<Output TaskParameter="ExeName" PropertyName="CallerExeName" />
-			<Output TaskParameter="FirstArg" PropertyName="CallerFirstArg" />
-		</GetInvocationCommandLine>
-
-		<!-- Optional tracing -->
-		<Message Importance="High" Text="Invocation: $(CallerCommandLine)" />
-		<Message Importance="High" Text="ExeName:   $(CallerExeName)" />
-		<Message Importance="High" Text="FirstArg:  $(CallerFirstArg)" />
-	</Target>
-
 	<!-- General build settings: defines the output type and target frameworks -->
 	<PropertyGroup>
 		<OutputType>Exe</OutputType>
