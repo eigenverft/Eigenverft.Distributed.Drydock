@@ -157,7 +157,7 @@ foreach ($projectFile in $solutionProjectsObj) {
 # --verbosity quiet,minimal,normal (default),detailed,diagnostic
 $commonProjectParameters = @(
     "--verbosity",
-    "normal",
+    "minimal",
     "-p:""Deterministic=true""",
     "-p:""ContinuousIntegrationBuild=true""",
     "-p:""VersionBuild=$($generatedVersion.VersionBuild)""",
