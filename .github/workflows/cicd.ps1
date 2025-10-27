@@ -51,6 +51,9 @@ $NUGET_GITHUB_PUSH = Get-ConfigValue -Check $NUGET_GITHUB_PUSH -FilePath (Join-P
 $NUGET_PAT = Get-ConfigValue -Check $NUGET_PAT -FilePath (Join-Path $PSScriptRoot 'cicd.secrets.json') -Property 'NUGET_PAT'
 $NUGET_TEST_PAT = Get-ConfigValue -Check $NUGET_TEST_PAT -FilePath (Join-Path $PSScriptRoot 'cicd.secrets.json') -Property 'NUGET_TEST_PAT'
 $PsGalleryApiKey = Get-ConfigValue -Check $PsGalleryApiKey -FilePath (Join-Path $PSScriptRoot 'cicd.secrets.json') -Property 'PsGalleryApiKey'
+Test-VariableValue -Variable { $NUGET_GITHUB_PUSH } -ExitIfNullOrEmpty -HideValue
+Test-VariableValue -Variable { $NUGET_PAT } -ExitIfNullOrEmpty -HideValue
+Test-VariableValue -Variable { $NUGET_TEST_PAT } -ExitIfNullOrEmpty -HideValue
 Test-VariableValue -Variable { $PsGalleryApiKey } -ExitIfNullOrEmpty -HideValue
 
 # Verify required commands are available
@@ -90,7 +93,9 @@ $LocalPowershellGalleryName = Register-LocalPSGalleryRepository -RepositoryName 
 $LocalNugetSourceName = "LocalNuget"
 $LocalNugetSourceName = Register-LocalNuGetDotNetPackageSource -SourceName "$LocalNugetSourceName"
 
+# All config files paths
 $configFolderName = Get-Path -Paths @("$gitTopLevelDirectory",".github","workflows",".config")
+
 $dotnetToolsFileName = Get-Path -Paths @("$configFolderName","dotnet-tools","dotnet-tools.json")
 $nugetLicenseAllowedFileName = Get-Path -Paths @("$configFolderName","nuget-license","allowed-licenses.json")
 $nugetLicenseMappingFileName = Get-Path -Paths @("$configFolderName","nuget-license","licenses-mapping.json")
@@ -100,12 +105,8 @@ $docFxTemplateOutFileName = Get-Path -Paths @("$configFolderName","docfx","build
 # Enable the .NET tools specified in the manifest file
 Enable-TempDotnetTools -ManifestFile "$dotnetToolsFileName" -NoReturn
 
-##############################################################################
-# Main CICD Logic
-
-#Required directorys
+# All required output folders
 $outputFolderName = Get-Path -Paths @("$gitTopLevelDirectory","output")
-
 $buildFolderName = Get-Path -Paths @("$outputFolderName","build")
 $buildBinFolderName = Get-Path -Paths @("$buildFolderName","bin")
 $buildObjFolderName = Get-Path -Paths @("$buildFolderName","obj")
@@ -165,10 +166,9 @@ $commonProjectParameters = @(
     "-p:""VersionSuffix=$($deploymentInfo.Affix.Suffix)""",
     "-p:""BaseOutputPath=$($buildBinFolder)/""",
     "-p:""IntermediateOutputPath=$($buildObjFolder)/"""
-    
-    
 )
 
+# Build, Test, Pack, Publish, and Generate Reports for each project in the solution.
 foreach ($projectFile in $solutionProjectsObj) {
 
     $isTestProject = Invoke-Exec -Executable "bbdist" -Arguments @("csproj", "--file", "$($projectFile.FullName)", "--property", "IsTestProject") -ReturnType Objects
@@ -211,7 +211,6 @@ foreach ($projectFile in $solutionProjectsObj) {
     {
         Invoke-Exec -Executable "dotnet" -Arguments @("publish", "$($projectFile.FullName)", "-c", "Release","-p:""Stage=publish""","-p:""PublishDir=$($publishFolder)""")  -CommonArguments $commonProjectParameters -CaptureOutput $false
     }
-
     
     if ($isPackable -eq $true)
     {
@@ -223,7 +222,5 @@ foreach ($projectFile in $solutionProjectsObj) {
         Convert-FilePlaceholders -InputFile "$docFxTemplateFileName" -OutputFile "$docFxTemplateOutFileName" -Replacements $replacements
         Invoke-Exec -Executable "docfx" -Arguments @("$docFxTemplateOutFileName")  -CaptureOutput $false -CaptureOutputDump $true
     }
-    
-
 }
 
