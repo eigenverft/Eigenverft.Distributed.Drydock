@@ -154,9 +154,10 @@ foreach ($projectFile in $solutionProjectsObj) {
     Write-Host "$($projectFile)"
 }
 
+# --verbosity quiet,minimal,normal (default),detailed,diagnostic
 $commonProjectParameters = @(
     "--verbosity",
-    "diag",
+    "normal",
     "-p:""Deterministic=true""",
     "-p:""ContinuousIntegrationBuild=true""",
     "-p:""VersionBuild=$($generatedVersion.VersionBuild)""",
@@ -175,8 +176,8 @@ foreach ($projectFile in $solutionProjectsObj) {
     $isPackable = Invoke-Exec -Executable "bbdist" -Arguments @("csproj", "--file", "$($projectFile.FullName)", "--property", "IsPackable") -ReturnType Objects
     $isPublishable = Invoke-Exec -Executable "bbdist" -Arguments @("csproj", "--file", "$($projectFile.FullName)", "--property", "IsPublishable") -ReturnType Objects
 
-    Invoke-Exec -Executable "dotnet" -Arguments @("clean", """$($projectFile.FullName)""", "-c", "Release","-p:""Stage=clean""")  -CommonArguments $commonProjectParameters -CaptureOutput $false -CaptureOutputDump $true
-    Invoke-Exec -Executable "dotnet" -Arguments @("restore", """$($projectFile.FullName)""", "-p:""Stage=restore""")  -CommonArguments $commonProjectParameters -CaptureOutput $false -CaptureOutputDump $true
+    Invoke-Exec -Executable "dotnet" -Arguments @("clean", """$($projectFile.FullName)""", "-c", "Release","-p:""Stage=clean""")  -CommonArguments $commonProjectParameters -CaptureOutput $false
+    Invoke-Exec -Executable "dotnet" -Arguments @("restore", """$($projectFile.FullName)""", "-p:""Stage=restore""")  -CommonArguments $commonProjectParameters -CaptureOutput $false
     Invoke-Exec -Executable "dotnet" -Arguments @("build", """$($projectFile.FullName)""", "-c", "Release","-p:""Stage=build""")  -CommonArguments $commonProjectParameters -CaptureOutput $false
 
     if (($isPackable -eq $true) -or ($isPublishable -eq $true))
