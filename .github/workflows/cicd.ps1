@@ -99,8 +99,9 @@ $configFolderName = Get-Path -Paths @("$gitTopLevelDirectory",".github","workflo
 $dotnetToolsFileName = Get-Path -Paths @("$configFolderName","dotnet-tools","dotnet-tools.json")
 $nugetLicenseAllowedFileName = Get-Path -Paths @("$configFolderName","nuget-license","allowed-licenses.json")
 $nugetLicenseMappingFileName = Get-Path -Paths @("$configFolderName","nuget-license","licenses-mapping.json")
-$docFxTemplateFileName = Get-Path -Paths @("$configFolderName","docfx","build","docfx_local_template.json")
-$docFxTemplateOutFileName = Get-Path -Paths @("$configFolderName","docfx","build","docfx_local.json")
+$docFxTemplateFileName = Get-Path -Paths @("$configFolderName","docfx","build","docfx_local.template.json")
+$indexTemplateFileName = Get-Path -Paths @("$configFolderName","docfx","build","index.template.md")
+$docfxConfigFile = Find-FilesByPattern -Path "$configFolderName\docfx" -Pattern "docfx_local.json"
 
 # Enable the .NET tools specified in the manifest file
 Enable-TempDotnetTools -ManifestFile "$dotnetToolsFileName" -NoReturn
@@ -122,6 +123,7 @@ if (-not $($runEnvironment.IsCI)) { Remove-FilesByPattern -Path "$outputFolderNa
 
 $branchVersionFolderName = Get-Path -Paths @($deploymentInfo.Branch.PathSegmentsSanitized,$generatedVersion.VersionFull)
 $channelVersionFolderName = Get-Path -Paths @($deploymentInfo.Channel.Value,$generatedVersion.VersionFull)
+$channelLatestFolderName = Get-Path -Paths @($deploymentInfo.Channel.Value,"latest")
 
 $buildFolder = New-Directory -Paths @($buildFolderName)
 $buildBinFolder = New-Directory -Paths @($buildBinFolderName,$branchVersionFolderName)
@@ -166,7 +168,9 @@ $commonProjectParameters = @(
     "-p:""VersionRevision=$($generatedVersion.VersionRevision)""",
     "-p:""VersionSuffix=$($deploymentInfo.Affix.Suffix)""",
     "-p:""BaseOutputPath=$($buildBinFolder)/""",
-    "-p:""IntermediateOutputPath=$($buildObjFolder)/"""
+    "-p:""IntermediateOutputPath=$($buildObjFolder)/""",
+    "-p:""UseSharedCompilation=false""",
+    "-m:1"
 )
 
 # Build, Test, Pack, Publish, and Generate Reports for each project in the solution.
@@ -183,19 +187,19 @@ foreach ($projectFile in $solutionProjectsObj) {
     if (($isPackable -eq $true) -or ($isPublishable -eq $true))
     {
         $jsonOutputVulnerable = Invoke-Exec -Executable "dotnet" -Arguments @("list", "$($projectFile.FullName)", "package", "--vulnerable", "--format", "json")
-        New-DotnetVulnerabilitiesReport -jsonInput $jsonOutputVulnerable -OutputFile "$reportsFolder\ReportVulnerabilities.md" -OutputFormat markdown -ExitOnVulnerability $false
+        New-DotnetVulnerabilitiesReport -jsonInput $jsonOutputVulnerable -OutputFile "$reportsFolder\$($projectFile.BaseName).Report.Vulnerabilities.md" -OutputFormat markdown -ExitOnVulnerability $false
     
         $jsonOutputDeprecated = Invoke-Exec -Executable "dotnet" -Arguments @("list", "$($projectFile.FullName)", "package", "--deprecated", "--include-transitive", "--format", "json")
-        New-DotnetDeprecatedReport -jsonInput $jsonOutputDeprecated -OutputFile "$reportsFolder\ReportDeprecated.md" -OutputFormat markdown -IgnoreTransitivePackages $true -ExitOnDeprecated $false
+        New-DotnetDeprecatedReport -jsonInput $jsonOutputDeprecated -OutputFile "$reportsFolder\$($projectFile.BaseName).Report.Deprecated.md" -OutputFormat markdown -IgnoreTransitivePackages $true -ExitOnDeprecated $false
     
         $jsonOutputOutdated = Invoke-Exec -Executable "dotnet" -Arguments @("list", "$($projectFile.FullName)", "package", "--outdated", "--include-transitive", "--format", "json")
-        New-DotnetOutdatedReport -jsonInput $jsonOutputOutdated -OutputFile "$reportsFolder\ReportOutdated.md" -OutputFormat markdown -IgnoreTransitivePackages $false
+        New-DotnetOutdatedReport -jsonInput $jsonOutputOutdated -OutputFile "$reportsFolder\$($projectFile.BaseName).Report.Outdated.md" -OutputFormat markdown -IgnoreTransitivePackages $false
     
         $jsonOutputBom = Invoke-Exec -Executable "dotnet" -Arguments @("list", "$($projectFile.FullName)", "package", "--include-transitive", "--format", "json")
-        New-DotnetBillOfMaterialsReport -jsonInput $jsonOutputBom -OutputFile "$reportsFolder\ReportBillOfMaterials.md" -OutputFormat markdown -IgnoreTransitivePackages $true
+        New-DotnetBillOfMaterialsReport -jsonInput $jsonOutputBom -OutputFile "$reportsFolder\$($projectFile.BaseName).Report.BillOfMaterials.md" -OutputFormat markdown -IgnoreTransitivePackages $true
     
         Invoke-Exec -Executable "nuget-license" -Arguments @("--input", "$($projectFile.FullName)", "--allowed-license-types", "$nugetLicenseAllowedFileName", "--output", "JsonPretty", "--licenseurl-to-license-mappings" ,"$nugetLicenseMappingFileName", "--file-output", "$reportsFolder/ReportProjectLicences.json" )
-        New-ThirdPartyNotice -LicenseJsonPath "$reportsFolder/ReportProjectLicences.json" -OutputPath "$reportsFolder\ReportThirdPartyNotices.txt"
+        New-ThirdPartyNotice -LicenseJsonPath "$reportsFolder/ReportProjectLicences.json" -OutputPath "$reportsFolder\$($projectFile.BaseName).Report.ThirdPartyNotices.txt"
     }
 
     if ($isTestProject -eq $true)
@@ -215,13 +219,67 @@ foreach ($projectFile in $solutionProjectsObj) {
     
     if ($isPackable -eq $true)
     {
-        $replacements = @{
+        $replacementsMap = @{
             "sourceCodeDirectory" = "$($projectFile.DirectoryName.Replace('\','/'))"
             "outputDirectory"     = ("$docsFolder\docfx").Replace('\','/')
             "appName"     = "$($projectFile.BaseName)"
         }
-        Convert-FilePlaceholders -InputFile "$docFxTemplateFileName" -OutputFile "$docFxTemplateOutFileName" -Replacements $replacements
-        Invoke-Exec -Executable "docfx" -Arguments @("$docFxTemplateOutFileName")  -CaptureOutput $false -CaptureOutputDump $true
+        Convert-TemplateFilePlaceholders -TemplateFile $docFxTemplateFileName -Replacements $replacementsMap
+        Convert-TemplateFilePlaceholders -TemplateFile $indexTemplateFileName -Replacements $replacementsMap
+        Invoke-Exec -Executable "docfx" -Arguments @("$($docfxConfigFile.FullName)")  -CaptureOutput $false -CaptureOutputDump $true
     }
 }
 
+# Resolving deployment information for the current branch
+$channelName = $deploymentInfo.Channel.Value
+
+# Determine where to publish based on the deployment channel
+if ($channelName -in @("development"))
+{
+    $publishToNugetToPublicLocal = $true
+    $publishToNugetToPublicGithub = $false
+    $publishToNugetToPublicTest = $false
+    $publishToNugetToPublic = $false
+
+    $buildBinFolderNamePub = $true
+}
+
+if ($channelName -in @('quality'))
+{
+    $publishToNugetToPublicLocal = $true
+    $publishToNugetToPublicGithub = $true
+    $publishToNugetToPublicTest = $true
+    $publishToNugetToPublic = $false
+}
+
+if ($channelName -in @('staging'))
+{
+    $publishToNugetToPublicLocal = $true
+    $publishToNugetToPublicGithub = $true
+    $publishToNugetToPublicTest = $true
+    $publishToNugetToPublic = $false
+}
+
+if ($channelName -in @('production'))
+{
+    $publishToNugetToPublicLocal = $true
+    $publishToNugetToPublicGithub = $true
+    $publishToNugetToPublicTest = $false
+    $publishToNugetToPublic = $true
+}
+
+# Publish artifacts to the appropriate destinations
+
+if ($publishToNugetToPublicLocal -eq $true)
+{
+    $nupkgFile = Find-FilesByPattern -Path "$packFolderName" -Pattern "*.nupkg"
+    Invoke-Exec -Executable "dotnet" -Arguments @("nuget", "push", "$($nupkgFile.FullName)", "--source","$LocalNugetSourceName") -CaptureOutput $false
+}
+
+if ($buildBinFolderNamePub -eq $true)
+{
+    #Copy-FilesRecursively -SourceDirectory "$publishFolder" -DestinationDirectory "C:\temp\aaaaa\$channelVersionFolderName" -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $false
+    #Copy-FilesRecursively -SourceDirectory "$publishFolder" -DestinationDirectory "C:\temp\aaaaa\$channelLatestFolderName" -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
+    #Copy-FilesRecursively -SourceDirectory "$publishFolder" -DestinationDirectory "C:\temp\aaaaa\distributed" -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
+    
+}
