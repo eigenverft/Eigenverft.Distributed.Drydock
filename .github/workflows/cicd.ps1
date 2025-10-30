@@ -302,12 +302,9 @@ if ($publishToNugetToPublic -eq $true)
     Invoke-Exec -Executable "dotnet" -Arguments @("nuget","push", "$($nupkgFile.FullName)", "--api-key", "$NUGET_PAT","--source","$nugetSourceUri") -CaptureOutput $false -CaptureOutputDump $false -HideValues @($NUGET_PAT)
 }
 
-
-
 if ($buildBinFolderNamePub -eq $true)
 {   
     Copy-FilesRecursively -SourceDirectory "$publishFolder" -DestinationDirectory (Get-Path -Paths @($binarayCopyDestination,"$channelVersionFolderName")) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $false
     Copy-FilesRecursively -SourceDirectory "$publishFolder" -DestinationDirectory (Get-Path -Paths @($binarayCopyDestination,"$channelLatestFolderName")) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
     Copy-FilesRecursively -SourceDirectory "$publishFolder" -DestinationDirectory (Get-Path -Paths @($binarayCopyDestination,"distributed")) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
-    
 }
