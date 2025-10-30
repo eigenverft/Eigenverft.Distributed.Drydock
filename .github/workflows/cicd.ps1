@@ -232,6 +232,13 @@ foreach ($projectFile in $solutionProjectsObj) {
 
 # Resolving deployment information for the current branch
 $channelName = $deploymentInfo.Channel.Value
+$githubNugetUsername = "eigenverft"
+$githubNugetSourceName = "github"
+$githubNugetUri = "https://nuget.pkg.github.com/$githubNugetUsername/index.json"
+$nugetTestSourceUri = "https://apiint.nugettest.org/v3/index.json"
+$nugetSourceUri = "https://api.nuget.org/v3/index.json"
+
+$binarayCopyDestination = "C:\temp\aaaaa"
 
 # Determine where to publish based on the deployment channel
 if ($channelName -in @("development"))
@@ -241,7 +248,7 @@ if ($channelName -in @("development"))
     $publishToNugetToPublicTest = $false
     $publishToNugetToPublic = $false
 
-    $buildBinFolderNamePub = $true
+    $buildBinFolderNamePub = $false
 }
 
 if ($channelName -in @('quality'))
@@ -268,18 +275,39 @@ if ($channelName -in @('production'))
     $publishToNugetToPublic = $true
 }
 
-# Publish artifacts to the appropriate destinations
-
+# Deploy *.nupkg artifacts to the appropriate destinations
 if ($publishToNugetToPublicLocal -eq $true)
 {
     $nupkgFile = Find-FilesByPattern -Path "$packFolderName" -Pattern "*.nupkg"
     Invoke-Exec -Executable "dotnet" -Arguments @("nuget", "push", "$($nupkgFile.FullName)", "--source","$LocalNugetSourceName") -CaptureOutput $false
 }
 
-if ($buildBinFolderNamePub -eq $true)
+if ($publishToNugetToPublicGithub -eq $true)
 {
-    #Copy-FilesRecursively -SourceDirectory "$publishFolder" -DestinationDirectory "C:\temp\aaaaa\$channelVersionFolderName" -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $false
-    #Copy-FilesRecursively -SourceDirectory "$publishFolder" -DestinationDirectory "C:\temp\aaaaa\$channelLatestFolderName" -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
-    #Copy-FilesRecursively -SourceDirectory "$publishFolder" -DestinationDirectory "C:\temp\aaaaa\distributed" -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
+    $nupkgFile = Find-FilesByPattern -Path "$packFolderName" -Pattern "*.nupkg"
+    Invoke-Exec -Executable "dotnet" -Arguments @("nuget","add", "source", "--username", "$githubNugetUsername","--password","$NUGET_GITHUB_PUSH","--store-password-in-clear-text","--name","$githubNugetSourceName","$githubNugetUri") -CaptureOutput $false -CaptureOutputDump $false -HideValues @($NUGET_GITHUB_PUSH)
+    Invoke-Exec -Executable "dotnet" -Arguments @("nuget","push", "$($nupkgFile.FullName)", "--api-key", "$NUGET_GITHUB_PUSH","--source","$githubNugetSourceName") -CaptureOutput $false -CaptureOutputDump $false -HideValues @($NUGET_GITHUB_PUSH)
+    Unregister-LocalNuGetDotNetPackageSource -SourceName "$githubNugetSourceName"
+}
+
+if ($publishToNugetToPublicTest -eq $true)
+{
+    $nupkgFile = Find-FilesByPattern -Path "$packFolderName" -Pattern "*.nupkg"
+    Invoke-Exec -Executable "dotnet" -Arguments @("nuget","push", "$($nupkgFile.FullName)", "--api-key", "$NUGET_TEST_PAT","--source","$nugetTestSourceUri") -CaptureOutput $false -CaptureOutputDump $false -HideValues @($NUGET_TEST_PAT)
+}
+
+if ($publishToNugetToPublic -eq $true)
+{
+    $nupkgFile = Find-FilesByPattern -Path "$packFolderName" -Pattern "*.nupkg"
+    Invoke-Exec -Executable "dotnet" -Arguments @("nuget","push", "$($nupkgFile.FullName)", "--api-key", "$NUGET_PAT","--source","$nugetSourceUri") -CaptureOutput $false -CaptureOutputDump $false -HideValues @($NUGET_PAT)
+}
+
+
+
+if ($buildBinFolderNamePub -eq $true)
+{   
+    Copy-FilesRecursively -SourceDirectory "$publishFolder" -DestinationDirectory (Get-Path -Paths @($binarayCopyDestination,"$channelVersionFolderName")) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $false
+    Copy-FilesRecursively -SourceDirectory "$publishFolder" -DestinationDirectory (Get-Path -Paths @($binarayCopyDestination,"$channelLatestFolderName")) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
+    Copy-FilesRecursively -SourceDirectory "$publishFolder" -DestinationDirectory (Get-Path -Paths @($binarayCopyDestination,"distributed")) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
     
 }
