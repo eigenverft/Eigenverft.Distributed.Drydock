@@ -56,6 +56,8 @@ namespace Eigenverft.Distributed.Drydock.Services
             List<string> retval = new List<string>();
             try
             {
+                _logger.LogInformation( "Failed to open project file: {solutionLocation}", solutionLocation);
+
                 List<ProjectInSolution> sln = SolutionFile.Parse(solutionLocation).ProjectsInOrder.Where(e => e.ProjectType == SolutionProjectType.KnownToBeMSBuildFormat).ToList();
                 List<ProjectRootElement> projects = new List<ProjectRootElement>();
 
@@ -73,6 +75,8 @@ namespace Eigenverft.Distributed.Drydock.Services
                             ["Platform"] = "AnyCPU",
                             //["MSBuildRuntimeType"] = "Core"
                         };
+
+                        _logger.LogInformation("item.AbsolutePath: {ProjectLocation}", item.AbsolutePath);
 
                         var projectload = new Project(item.AbsolutePath, globalProperties, null);
 

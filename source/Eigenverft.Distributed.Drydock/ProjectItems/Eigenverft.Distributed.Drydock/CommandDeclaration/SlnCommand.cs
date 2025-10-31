@@ -14,8 +14,6 @@ namespace Eigenverft.Distributed.Drydock.CommandDeclaration
 
         public static Option<string> Location { get; private set; }
 
-        public static Option<string> Property { get; private set; }
-
         static SlnCommand()
         {
             Location = new("--location")
@@ -24,16 +22,10 @@ namespace Eigenverft.Distributed.Drydock.CommandDeclaration
                 Required = true,
             };
 
-            Property = new("--property")
-            {
-                Description = "MSBuild property name to read.",
-                Required = true,
-            };
 
             Command = new Command("sln", "Retrieve project file paths from a solution (.sln) file.")
             {
                 Location,
-                Property,
             };
         }
     }

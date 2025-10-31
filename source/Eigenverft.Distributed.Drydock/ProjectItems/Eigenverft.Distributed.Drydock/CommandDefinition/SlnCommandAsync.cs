@@ -22,7 +22,6 @@ namespace Eigenverft.Distributed.Drydock.CommandDefinition
             try
             {
                 var sourceDirectory = parseResult.GetRequiredValue(SlnCommand.Location);
-                var outputArchive = parseResult.GetRequiredValue(SlnCommand.Property);
                 
                 var result = await _solutionProjectService.GetCsProjAbsolutPathsFromSolutions(sourceDirectory, cancellationToken);
 
