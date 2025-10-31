@@ -16,13 +16,11 @@ namespace Eigenverft.Distributed.Drydock.CommandDeclaration
 
         public static Option<string> Property { get; private set; }
 
-        public static Option<ElementScope> Scope { get; private set; }
-
         static SlnCommand()
         {
             Location = new("--location")
             {
-                Description = "Full path to the target .csproj file.",
+                Description = "Full path to the target solution file (.sln).",
                 Required = true,
             };
 
@@ -32,17 +30,10 @@ namespace Eigenverft.Distributed.Drydock.CommandDeclaration
                 Required = true,
             };
 
-            Scope = new("--scope")
-            {
-                Description = "Value scope: 'outer' returns the containing XML element; 'inner' returns only the element's text (default).",
-                DefaultValueFactory = _ => ElementScope.inner,
-            };
-
-            Command = new Command("sln", "Read a property value from a .csproj file.")
+            Command = new Command("sln", "Retrieve project file paths from a solution (.sln) file.")
             {
                 Location,
                 Property,
-                Scope,
             };
         }
     }

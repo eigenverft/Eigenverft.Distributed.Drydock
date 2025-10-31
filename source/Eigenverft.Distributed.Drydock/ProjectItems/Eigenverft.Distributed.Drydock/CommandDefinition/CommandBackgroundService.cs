@@ -57,8 +57,8 @@ namespace Eigenverft.Distributed.Drydock.CommandDefinition
                 ParseResult parseResult = rootCommand.Parse(_commandLineArgs.Args);
 
                 bool isDefault = false;
-                var defaultParemeters = parseResult.CommandResult.Command.Options.Select(e => e.Name).Concat(parseResult.CommandResult.Command.Options.SelectMany(e => e.Aliases)).ToList();
-                if (parseResult.Tokens.Count == 1 && defaultParemeters.Contains(parseResult.Tokens[0].Value))
+                var defaultParameters = parseResult.CommandResult.Command.Options.Select(e => e.Name).Concat(parseResult.CommandResult.Command.Options.SelectMany(e => e.Aliases)).ToList();
+                if (parseResult.Tokens.Count == 1 && defaultParameters.Contains(parseResult.Tokens[0].Value))
                 {
                     isDefault = true;
                 }

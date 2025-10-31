@@ -24,11 +24,18 @@ namespace Eigenverft.Distributed.Drydock.CommandDefinition
                 var sourceDirectory = parseResult.GetRequiredValue(CsProjCommand.Location);
                 var outputArchive = parseResult.GetRequiredValue(CsProjCommand.Property);
                 
-                var result = await _solutionProjectService.GetProjectProperty(sourceDirectory,outputArchive,CsProjCommand.ElementScope.inner, cancellationToken);
+                var result = await _solutionProjectService.GetProjectProperty(sourceDirectory, outputArchive, CsProjCommand.ElementScope.inner, cancellationToken);
 
-                _logger.LogInformation("Successfully created ZIP: {ZipPath}", outputArchive);
-                _logger.LogInformation("result {result}", result.ToString());
-                _logger.LogError("Failed to create ZIP: {ZipPath}", outputArchive);
+                var propertyName = parseResult.GetRequiredValue(CsProjCommand.Property);
+                if (!string.IsNullOrEmpty(result))
+                {
+                    _logger.LogInformation("Property '{Property}' from '{ProjectFile}' = {Value}", propertyName, sourceDirectory, result);
+                }
+                else
+                {
+                    _logger.LogWarning("Property '{Property}' was not found or is empty in project: {ProjectFile}", propertyName, sourceDirectory);
+                    return -1;
+                }
             }
             catch (OperationCanceledException)
             {
@@ -37,7 +44,7 @@ namespace Eigenverft.Distributed.Drydock.CommandDefinition
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error occurred while CsProjCommandAsync.");
+                _logger.LogError(ex, "Error occurred while reading property from project.");
                 return -1;
             }
 

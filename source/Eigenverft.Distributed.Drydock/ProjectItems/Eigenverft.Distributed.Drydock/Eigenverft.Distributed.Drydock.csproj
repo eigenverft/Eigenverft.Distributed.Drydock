@@ -69,7 +69,15 @@
 		<RepositoryType>git</RepositoryType>
 		<Description>
 			<![CDATA[
-			Eigenverft.Distributed.Drydock is a multi-purpose command-line .NET tool, containing a suite of helper functionalities.
+			Eigenverft.Distributed.Drydock is a specialized command-line .NET tool designed to enhance solution and project file management. It provides advanced capabilities for reading and analyzing .NET solution (.sln) and project (.csproj) files, with features including:
+			
+			- Retrieving and analyzing project properties from .csproj files
+			- Extracting project paths and dependencies from solution files 
+			- Smart project sorting based on test/non-test project types
+			- Support for MSBuild property analysis with inner/outer element scoping
+			- Built-in logging and error handling for reliable automation
+			
+			Ideal for build automation, CI/CD pipelines, and project management tasks that require deep .NET project structure analysis.
 			]]>
 		</Description>
 		<PackageReadmeFile>Readme.md</PackageReadmeFile>

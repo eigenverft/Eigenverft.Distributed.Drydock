@@ -101,7 +101,7 @@ $NuGetAllowedLicensesPath = Get-Path -Paths @("$ConfigRootPath","nuget-license",
 $NuGetLicenseMappingsPath = Get-Path -Paths @("$ConfigRootPath","nuget-license","licenses-mapping.json")
 $DocFxTemplatePath = Get-Path -Paths @("$ConfigRootPath","docfx","build","docfx_local.template.json")
 $IndexTemplatePath = Get-Path -Paths @("$ConfigRootPath","docfx","build","index.template.md")
-$DocFxConfigFileInfo = Find-FilesByPattern -Path "$ConfigRootPath\docfx" -Pattern "docfx_local.json"
+$DocFxConfigFileInfos = Find-FilesByPattern -Path (Get-Path -Paths @("$ConfigRootPath","docfx")) -Pattern "docfx_local.json"
 
 # Enable the .NET tools specified in the manifest file
 Enable-TempDotnetTools -ManifestFile "$DotNetToolsManifestPath" -NoReturn
@@ -109,8 +109,8 @@ Enable-TempDotnetTools -ManifestFile "$DotNetToolsManifestPath" -NoReturn
 # All required output folders
 $OutputRootPath = Get-Path -Paths @("$GitRepositoryRoot","output")
 $BuildRootPath = Get-Path -Paths @("$OutputRootPath","build")
-$BuildBinRootPath = Get-Path -Paths @("$BuildRootPath","bin")
-$BuildObjRootPath = Get-Path -Paths @("$BuildRootPath","obj")
+$BuildBinPath = Get-Path -Paths @("$BuildRootPath","bin")
+$BuildObjPath = Get-Path -Paths @("$BuildRootPath","obj")
 $PackRootPath = Get-Path -Paths @("$OutputRootPath","pack")
 $PublishRootPath = Get-Path -Paths @("$OutputRootPath","publish")
 $ReportsRootPath =  Get-Path -Paths @("$OutputRootPath","reports")
@@ -124,8 +124,8 @@ if (-not $($RunEnvironment.IsCI)) { Remove-FilesByPattern -Path "$OutputRootPath
 
 # Create required output directories
 New-Directory -Paths @($BuildRootPath)
-$BuildBinDirectory = New-Directory -Paths @($BuildBinRootPath,$BranchVersionRelativePath)
-$BuildObjDirectory = New-Directory -Paths @($BuildObjRootPath,$BranchVersionRelativePath)
+$BuildBinDirectory = New-Directory -Paths @($BuildBinPath,$BranchVersionRelativePath)
+$BuildObjDirectory = New-Directory -Paths @($BuildObjPath,$BranchVersionRelativePath)
 $PackDirectory = New-Directory -Paths @($PackRootPath,$ChannelVersionRelativePath)
 $PublishDirectory = New-Directory -Paths @($PublishRootPath,$ChannelVersionRelativePath)
 $ReportsDirectory = New-Directory -Paths @($ReportsRootPath,$ChannelVersionRelativePath)
@@ -133,22 +133,22 @@ $DocsDirectory = New-Directory -Paths @($DocsRootPath,$ChannelVersionRelativePat
 
 
 # Initialize the array to accumulate projects.
-$SolutionFiles = Find-FilesByPattern -Path "$GitRepositoryRoot\source" -Pattern "*.sln"
+$SolutionFileInfos = Find-FilesByPattern -Path "$GitRepositoryRoot\source" -Pattern "*.sln"
 $SolutionProjectPaths = @()
-foreach ($solutionFile in $SolutionFiles) {
+foreach ($solutionFile in $SolutionFileInfos) {
     # all ready sorted by the bbdist
     $CurrentProjectPaths = Invoke-Exec -Executable "bbdist" -Arguments @( "sln", "--file", "$($solutionFile.FullName)")
     $SolutionProjectPaths += $CurrentProjectPaths
 }
 
-$ProjectFiles = $SolutionProjectPaths | ForEach-Object { Get-Item $_ }
+$ProjectFileInfos = $SolutionProjectPaths | ForEach-Object { Get-Item $_ }
 
-foreach ($ProjectFileInfo in $ProjectFiles) {
+foreach ($ProjectFileInfo in $ProjectFileInfos) {
     Write-Host "$($ProjectFileInfo)"
 }
 
 # --verbosity quiet,minimal,normal (default),detailed,diagnostic
-$CommonProjectParameters = @(
+$DotnetCommonParameters = @(
     "--verbosity",
     "minimal",
     "-p:""Deterministic=true""",
@@ -165,15 +165,15 @@ $CommonProjectParameters = @(
 )
 
 # Build, Test, Pack, Publish, and Generate Reports for each project in the solution.
-foreach ($ProjectFileInfo in $ProjectFiles) {
+foreach ($ProjectFileInfo in $ProjectFileInfos) {
 
     $IsTestProject = Invoke-Exec -Executable "bbdist" -Arguments @("csproj", "--file", "$($ProjectFileInfo.FullName)", "--property", "IsTestProject") -ReturnType Objects
     $IsPackable = Invoke-Exec -Executable "bbdist" -Arguments @("csproj", "--file", "$($ProjectFileInfo.FullName)", "--property", "IsPackable") -ReturnType Objects
     $IsPublishable = Invoke-Exec -Executable "bbdist" -Arguments @("csproj", "--file", "$($ProjectFileInfo.FullName)", "--property", "IsPublishable") -ReturnType Objects
 
-    Invoke-Exec -Executable "dotnet" -Arguments @("clean", """$($ProjectFileInfo.FullName)""", "-c", "Release","-p:""Stage=clean""")  -CommonArguments $CommonProjectParameters -CaptureOutput $false
-    Invoke-Exec -Executable "dotnet" -Arguments @("restore", """$($ProjectFileInfo.FullName)""", "-p:""Stage=restore""")  -CommonArguments $CommonProjectParameters -CaptureOutput $false
-    Invoke-Exec -Executable "dotnet" -Arguments @("build", """$($ProjectFileInfo.FullName)""", "-c", "Release","-p:""Stage=build""")  -CommonArguments $CommonProjectParameters -CaptureOutput $false
+    Invoke-Exec -Executable "dotnet" -Arguments @("clean", """$($ProjectFileInfo.FullName)""", "-c", "Release","-p:""Stage=clean""")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
+    Invoke-Exec -Executable "dotnet" -Arguments @("restore", """$($ProjectFileInfo.FullName)""", "-p:""Stage=restore""")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
+    Invoke-Exec -Executable "dotnet" -Arguments @("build", """$($ProjectFileInfo.FullName)""", "-c", "Release","-p:""Stage=build""")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
 
     if (($IsPackable -eq $true) -or ($IsPublishable -eq $true))
     {
@@ -195,29 +195,29 @@ foreach ($ProjectFileInfo in $ProjectFiles) {
 
     if ($IsTestProject -eq $true)
     {
-        Invoke-Exec -Executable "dotnet" -Arguments @("test", "$($ProjectFileInfo.FullName)", "-c", "Release","-p:""Stage=test""")  -CommonArguments $CommonProjectParameters -CaptureOutput $false
+        Invoke-Exec -Executable "dotnet" -Arguments @("test", "$($ProjectFileInfo.FullName)", "-c", "Release","-p:""Stage=test""")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
     }
 
     if ($IsPackable -eq $true)
     {
-        Invoke-Exec -Executable "dotnet" -Arguments @("pack", "$($ProjectFileInfo.FullName)", "-c", "Release","-p:""Stage=pack""","-p:""PackageOutputPath=$($PackDirectory)""")  -CommonArguments $CommonProjectParameters -CaptureOutput $false
+        Invoke-Exec -Executable "dotnet" -Arguments @("pack", "$($ProjectFileInfo.FullName)", "-c", "Release","-p:""Stage=pack""","-p:""PackageOutputPath=$($PackDirectory)""")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
     }
 
     if ($IsPublishable -eq $true)
     {
-        Invoke-Exec -Executable "dotnet" -Arguments @("publish", "$($ProjectFileInfo.FullName)", "-c", "Release","-p:""Stage=publish""","-p:""PublishDir=$($PublishDirectory)""")  -CommonArguments $CommonProjectParameters -CaptureOutput $false
+        Invoke-Exec -Executable "dotnet" -Arguments @("publish", "$($ProjectFileInfo.FullName)", "-c", "Release","-p:""Stage=publish""","-p:""PublishDir=$($PublishDirectory)""")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
     }
     
     if ($IsPackable -eq $true)
     {
-        $DocFxReplacementsMap = @{
+        $DocFxReplacementsByToken = @{
             "sourceCodeDirectory" = "$($ProjectFileInfo.DirectoryName.Replace('\','/'))"
-            "outputDirectory"     = ("$DocsDirectory\docfx").Replace('\','/')
+            "outputDirectory"     = (Get-Path -Paths @("$DocsDirectory","docfx")).Replace('\','/')
             "appName"     = "$($ProjectFileInfo.BaseName)"
         }
-        Convert-TemplateFilePlaceholders -TemplateFile $DocFxTemplatePath -Replacements $DocFxReplacementsMap
-        Convert-TemplateFilePlaceholders -TemplateFile $IndexTemplatePath -Replacements $DocFxReplacementsMap
-        Invoke-Exec -Executable "docfx" -Arguments @("$($DocFxConfigFileInfo.FullName)")  -CaptureOutput $false -CaptureOutputDump $true
+        Convert-TemplateFilePlaceholders -TemplateFile $DocFxTemplatePath -Replacements $DocFxReplacementsByToken
+        Convert-TemplateFilePlaceholders -TemplateFile $IndexTemplatePath -Replacements $DocFxReplacementsByToken
+        Invoke-Exec -Executable "docfx" -Arguments @("$($DocFxConfigFileInfos.FullName)")  -CaptureOutput $false -CaptureOutputDump $true
     }
 }
 
@@ -229,7 +229,7 @@ $GitHubSourceUri = "https://nuget.pkg.github.com/$GitHubPackagesUser/index.json"
 $NuGetTestSourceUri = "https://apiint.nugettest.org/v3/index.json"
 $NuGetOrgSourceUri = "https://api.nuget.org/v3/index.json"
 
-$BinaryDropRoot = "C:\temp\$($ProjectFileInfo.BaseName)-drops"
+$BinaryDropRootPath = "C:\temp\$($ProjectFileInfo.BaseName)-drops"
 
 $PushToLocalSource = $false
 $PushToGitHubSource = $false
@@ -286,37 +286,37 @@ if ($DeploymentChannel -in @('production'))
 # Deploy *.nupkg artifacts to the appropriate destinations
 if ($PushToLocalSource -eq $true)
 {
-    $NuGetPackageFiles = Find-FilesByPattern -Path "$PackRootPath" -Pattern "*.nupkg"
-    Invoke-Exec -Executable "dotnet" -Arguments @("nuget", "push", "$($NuGetPackageFiles.FullName)", "--source","$LocalNuGetSourceName") -CaptureOutput $false
+    $NuGetPackageFileInfos = Find-FilesByPattern -Path "$PackRootPath" -Pattern "*.nupkg"
+    Invoke-Exec -Executable "dotnet" -Arguments @("nuget", "push", "$($NuGetPackageFileInfos.FullName)", "--source","$LocalNuGetSourceName") -CaptureOutput $false
 }
 
 if ($PushToGitHubSource -eq $true)
 {
-    $NuGetPackageFiles = Find-FilesByPattern -Path "$PackRootPath" -Pattern "*.nupkg"
+    $NuGetPackageFileInfos = Find-FilesByPattern -Path "$PackRootPath" -Pattern "*.nupkg"
     Invoke-Exec -Executable "dotnet" -Arguments @("nuget","add", "source", "--username", "$GitHubPackagesUser","--password","$NUGET_GITHUB_PUSH","--store-password-in-clear-text","--name","$GitHubSourceName","$GitHubSourceUri") -CaptureOutput $false -CaptureOutputDump $false -HideValues @($NUGET_GITHUB_PUSH)
-    Invoke-Exec -Executable "dotnet" -Arguments @("nuget","push", "$($NuGetPackageFiles.FullName)", "--api-key", "$NUGET_GITHUB_PUSH","--source","$GitHubSourceName") -CaptureOutput $false -CaptureOutputDump $false -HideValues @($NUGET_GITHUB_PUSH)
+    Invoke-Exec -Executable "dotnet" -Arguments @("nuget","push", "$($NuGetPackageFileInfos.FullName)", "--api-key", "$NUGET_GITHUB_PUSH","--source","$GitHubSourceName") -CaptureOutput $false -CaptureOutputDump $false -HideValues @($NUGET_GITHUB_PUSH)
     Unregister-LocalNuGetDotNetPackageSource -SourceName "$GitHubSourceName"
 }
 
 if ($PushToNuGetTest -eq $true)
 {
-    $NuGetPackageFiles = Find-FilesByPattern -Path "$PackRootPath" -Pattern "*.nupkg"
-    Invoke-Exec -Executable "dotnet" -Arguments @("nuget","push", "$($NuGetPackageFiles.FullName)", "--api-key", "$NUGET_TEST_PAT","--source","$NuGetTestSourceUri") -CaptureOutput $false -CaptureOutputDump $false -HideValues @($NUGET_TEST_PAT)
+    $NuGetPackageFileInfos = Find-FilesByPattern -Path "$PackRootPath" -Pattern "*.nupkg"
+    Invoke-Exec -Executable "dotnet" -Arguments @("nuget","push", "$($NuGetPackageFileInfos.FullName)", "--api-key", "$NUGET_TEST_PAT","--source","$NuGetTestSourceUri") -CaptureOutput $false -CaptureOutputDump $false -HideValues @($NUGET_TEST_PAT)
 }
 
 if ($PushToNuGetOrg -eq $true)
 {
-    $NuGetPackageFiles = Find-FilesByPattern -Path "$PackRootPath" -Pattern "*.nupkg"
-    Invoke-Exec -Executable "dotnet" -Arguments @("nuget","push", "$($NuGetPackageFiles.FullName)", "--api-key", "$NUGET_PAT","--source","$NuGetOrgSourceUri") -CaptureOutput $false -CaptureOutputDump $false -HideValues @($NUGET_PAT)
+    $NuGetPackageFileInfos = Find-FilesByPattern -Path "$PackRootPath" -Pattern "*.nupkg"
+    Invoke-Exec -Executable "dotnet" -Arguments @("nuget","push", "$($NuGetPackageFileInfos.FullName)", "--api-key", "$NUGET_PAT","--source","$NuGetOrgSourceUri") -CaptureOutput $false -CaptureOutputDump $false -HideValues @($NUGET_PAT)
 }
 
 if ($CopyToChannelDrops -eq $true)
 {   
-    Copy-FilesRecursively -SourceDirectory "$PublishDirectory" -DestinationDirectory (Get-Path -Paths @($BinaryDropRoot,"$ChannelVersionRelativePath")) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $false
-    Copy-FilesRecursively -SourceDirectory "$PublishDirectory" -DestinationDirectory (Get-Path -Paths @($BinaryDropRoot,"$ChannelLatestRelativePath")) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
+    Copy-FilesRecursively -SourceDirectory "$PublishDirectory" -DestinationDirectory (Get-Path -Paths @($BinaryDropRootPath,"$ChannelVersionRelativePath")) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $false
+    Copy-FilesRecursively -SourceDirectory "$PublishDirectory" -DestinationDirectory (Get-Path -Paths @($BinaryDropRootPath,"$ChannelLatestRelativePath")) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
 }
 
 if ($CopyToDistributionDrop -eq $true)
 {   
-    Copy-FilesRecursively -SourceDirectory "$PublishDirectory" -DestinationDirectory (Get-Path -Paths @($BinaryDropRoot,"distributed")) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
+    Copy-FilesRecursively -SourceDirectory "$PublishDirectory" -DestinationDirectory (Get-Path -Paths @($BinaryDropRootPath,"distributed")) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
 }

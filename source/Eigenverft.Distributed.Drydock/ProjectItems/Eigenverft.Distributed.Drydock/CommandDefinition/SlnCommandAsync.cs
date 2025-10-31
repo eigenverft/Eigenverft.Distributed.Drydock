@@ -26,9 +26,22 @@ namespace Eigenverft.Distributed.Drydock.CommandDefinition
                 
                 var result = await _solutionProjectService.GetCsProjAbsolutPathsFromSolutions(sourceDirectory, cancellationToken);
 
-                _logger.LogInformation("Successfully created ZIP: {ZipPath}", outputArchive);
-                _logger.LogInformation("result {result}", result.ToString());
-                _logger.LogError("Failed to create ZIP: {ZipPath}", outputArchive);
+                if (result is null)
+                {
+                    _logger.LogWarning("No project paths could be read from solution: {SolutionPath}", sourceDirectory);
+                    return -1;
+                }
+
+                if (result.Count > 0)
+                {
+                    _logger.LogInformation("Retrieved {Count} project path(s) from solution: {SolutionPath}", result.Count, sourceDirectory);
+                    _logger.LogDebug("Project paths: {ProjectPaths}", string.Join(";", result));
+                }
+                else
+                {
+                    _logger.LogWarning("Solution contained no MSBuild projects: {SolutionPath}", sourceDirectory);
+                    return -1;
+                }
             }
             catch (OperationCanceledException)
             {
@@ -37,7 +50,7 @@ namespace Eigenverft.Distributed.Drydock.CommandDefinition
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error occurred while CsProjCommandAsync.");
+                _logger.LogError(ex, "Error occurred while reading project paths from solution: {SolutionPath}", ex.Message);
                 return -1;
             }
 
