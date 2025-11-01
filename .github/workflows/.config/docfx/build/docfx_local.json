@@ -28,7 +28,7 @@
         ]
       }
     ],
-    "output": "C:/dev/github.com/eigenverft/Eigenverft.Distributed.Drydock/output/docs/development/0.1.20256.16376/docfx",
+    "output": "C:/dev/github.com/eigenverft/Eigenverft.Distributed.Drydock/output/docs/development/0.1.20256.18247/docfx",
     "template": [
       "statictoc",
       "../_exported_templates/override"

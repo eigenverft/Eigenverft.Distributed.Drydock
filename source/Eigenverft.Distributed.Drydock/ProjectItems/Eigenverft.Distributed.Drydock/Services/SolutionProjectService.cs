@@ -78,7 +78,7 @@ namespace Eigenverft.Distributed.Drydock.Services
 
                         _logger.LogInformation("item.AbsolutePath: {ProjectLocation}", item.AbsolutePath);
 
-                        var projectload = new Project(item.AbsolutePath, globalProperties, null);
+                        //var projectload = new Project(item.AbsolutePath, globalProperties, null);
 
                         projects.Add(projectRoot);
                     }

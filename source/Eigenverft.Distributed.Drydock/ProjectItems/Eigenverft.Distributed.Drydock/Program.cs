@@ -1,10 +1,11 @@
 ﻿using System;
+using System.IO;
 using System.Threading.Tasks;
 
 using Eigenverft.Distributed.Drydock.CommandDefinition;
 using Eigenverft.Distributed.Drydock.Services;
 
-using Microsoft.Build.Locator;
+
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -17,7 +18,8 @@ namespace Eigenverft.Distributed.Drydock
     {
         private static async Task<int> Main(string[] args)
         {
-            MSBuildLocator.RegisterDefaults();
+            // MSBuildLocator.RegisterDefaults();
+            //MsBuildBootstrap.InitializeForSingleFile();
 
             Log.Logger = new LoggerConfiguration()
                 .MinimumLevel.Verbose()

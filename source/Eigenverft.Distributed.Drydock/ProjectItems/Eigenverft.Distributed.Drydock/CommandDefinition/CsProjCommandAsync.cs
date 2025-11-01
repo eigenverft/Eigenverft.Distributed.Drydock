@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 
 using Eigenverft.Distributed.Drydock.CommandDeclaration;
 
+using Microsoft.Build.Evaluation;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -50,5 +51,6 @@ namespace Eigenverft.Distributed.Drydock.CommandDefinition
 
             return 0;
         }
+
     }
 }

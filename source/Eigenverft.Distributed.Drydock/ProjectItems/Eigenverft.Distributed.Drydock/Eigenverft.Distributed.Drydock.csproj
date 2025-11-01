@@ -95,14 +95,13 @@
 		<!-- Specify the target runtime; adjust as needed (e.g., win-x86, linux-x64) -->
 		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
 
-
-		<SelfContained Condition="">true</SelfContained>
+		<SelfContained>true</SelfContained>
 		<!-- Enable single-file publish -->
-		<PublishSingleFile>true</PublishSingleFile>
+		<PublishSingleFile>false</PublishSingleFile>
 		<!-- Enable compression to reduce the size of the single-file executable -->
-		<EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+		<EnableCompressionInSingleFile>false</EnableCompressionInSingleFile>
 		<!-- Ensure native libraries are extracted at runtime -->
-		<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+		<IncludeNativeLibrariesForSelfExtract>false</IncludeNativeLibrariesForSelfExtract>
 	</PropertyGroup>
 
 	<Target Name="PublishToolNameTo" AfterTargets="Publish" Condition="'$(PackAsTool)' == 'true' ">
@@ -123,8 +122,9 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Microsoft.Build" Version="17.11.31" />
-		<PackageReference Include="Microsoft.Build.Locator" Version="1.9.1" />
+		<PackageReference Include="Microsoft.Build.Framework" Version="15.9.20" />
+		<PackageReference Include="Microsoft.Build.Utilities.Core" Version="15.9.20" />
+		<PackageReference Include="Microsoft.Build" Version="15.9.20" />
 		
 		<PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.10" />
 		<PackageReference Include="Serilog" Version="4.3.0" />
