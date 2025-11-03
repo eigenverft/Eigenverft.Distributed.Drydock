@@ -18,10 +18,10 @@
 
 	<!-- Packaging and publish configuration -->
 	<PropertyGroup>
-		<IsPackable>true</IsPackable>
+		<IsPackable>false</IsPackable>
 		<IsPublishable>true</IsPublishable>
 		<IsTestProject>false</IsTestProject>
-		<PackAsTool>true</PackAsTool>
+		<PackAsTool>false</PackAsTool>
 	</PropertyGroup>
 
 	<!-- Versioning details -->
@@ -90,11 +90,12 @@
 
 		<SelfContained>true</SelfContained>
 		<!-- Enable single-file publish -->
-		<PublishSingleFile>false</PublishSingleFile>
+		<PublishSingleFile>true</PublishSingleFile>
 		<!-- Enable compression to reduce the size of the single-file executable -->
-		<EnableCompressionInSingleFile>false</EnableCompressionInSingleFile>
+		<EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
 		<!-- Ensure native libraries are extracted at runtime -->
-		<IncludeNativeLibrariesForSelfExtract>false</IncludeNativeLibrariesForSelfExtract>
+		<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+		<PublishTrimmed>true</PublishTrimmed>
 	</PropertyGroup>
 
 	<Target Name="PublishToolNameTo" AfterTargets="Publish" Condition="'$(PackAsTool)' == 'true' ">
@@ -109,18 +110,5 @@
 		<Message Text="Renaming $(AssemblyName).exe to $(NewExeName) in $(PublishDir)" Importance="High" />
 		<Move SourceFiles="@(PublishedExe)" DestinationFiles="$(PublishDir)$(NewExeName)" />
 	</Target>
-
-	<ItemGroup>
-		<PackageReference Include="Microsoft.Build.Framework" Version="15.9.20" />
-		<PackageReference Include="Microsoft.Build.Utilities.Core" Version="15.9.20" />
-		<PackageReference Include="Microsoft.Build" Version="15.9.20" />
-		
-		<PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.10" />
-		<PackageReference Include="Serilog" Version="4.3.0" />
-		<PackageReference Include="Serilog.Extensions.Hosting" Version="9.0.0" />
-		<PackageReference Include="Serilog.Sinks.Async" Version="2.1.0" />
-		<PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
-		<PackageReference Include="System.CommandLine" Version="2.0.0-beta5.25306.1" />
-	</ItemGroup>
 
 </Project>
