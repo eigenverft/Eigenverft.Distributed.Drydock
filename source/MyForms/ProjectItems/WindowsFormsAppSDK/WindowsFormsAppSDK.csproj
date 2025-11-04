@@ -1,11 +1,117 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net9.0-windows</TargetFramework>
-    <Nullable>enable</Nullable>
-    <UseWindowsForms>true</UseWindowsForms>
-    <ImplicitUsings>enable</ImplicitUsings>
-  </PropertyGroup>
+	<!-- Branding information -->
+	<PropertyGroup>
+		<Branding>Eigenverft</Branding>
+	</PropertyGroup>
+
+	<!-- General build settings: defines the output type and target frameworks -->
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net20</TargetFramework>
+		<TargetFrameworks>net20;net40</TargetFrameworks>
+		<SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
+		<CheckEolTargetFramework>false</CheckEolTargetFramework>
+		<InvariantGlobalization>true</InvariantGlobalization>
+		<DisableMSBuildAssemblyCopyCheck>true</DisableMSBuildAssemblyCopyCheck>
+		<UseWindowsForms>true</UseWindowsForms>
+	</PropertyGroup>
+
+	<!-- Packaging and publish configuration -->
+	<PropertyGroup>
+		<IsPackable>false</IsPackable>
+		<IsPublishable>true</IsPublishable>
+		<IsTestProject>false</IsTestProject>
+		<PackAsTool>false</PackAsTool>
+	</PropertyGroup>
+
+	<!-- Versioning details -->
+	<PropertyGroup>
+		<VersionBuild>0</VersionBuild>
+		<VersionMajor>1</VersionMajor>
+		<VersionMinor>0</VersionMinor>
+		<VersionRevision>0</VersionRevision>
+		<AssemblyVersion>$(VersionBuild).$(VersionMajor).$(VersionMinor).$(VersionRevision)</AssemblyVersion>
+		<Version>$(VersionBuild).$(VersionMajor).$(VersionMinor).$(VersionRevision)$(VersionSuffix)</Version>
+	</PropertyGroup>
+
+	<!-- C# language features and debugging configuration -->
+	<PropertyGroup>
+		<ImplicitUsings>disable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<DebugType>embedded</DebugType>
+		<LangVersion>latest</LangVersion>
+	</PropertyGroup>
+
+	<!-- Company and copyright information -->
+	<PropertyGroup>
+		<Copyright>Copyright (c) 2025 $(Branding)</Copyright>
+		<Company></Company>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(PackAsTool)' == 'true' ">
+		<ToolCommandName>drydock</ToolCommandName>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Stage)' == 'pack'">
+		<Authors>$(Branding)</Authors>
+		<Owners>$(Branding)</Owners>
+		<PackageId>$(AssemblyName)</PackageId>
+		<PackageTags>$(Branding);dotnet;tool;drydock</PackageTags>
+		<PackageProjectUrl>https://github.com/eigenverft/Eigenverft.Distributed.Drydock</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/eigenverft/Eigenverft.Distributed.Drydock</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+		<Description>
+			<![CDATA[
+			Eigenverft.Distributed.Drydock is a specialized command-line .NET tool designed to enhance solution and project file management. It provides advanced capabilities for reading and analyzing .NET solution (.sln) and project (.csproj) files, with features including:
+			
+			- Retrieving and analyzing project properties from .csproj files
+			- Extracting project paths and dependencies from solution files 
+			- Smart project sorting based on test/non-test project types
+			- Support for MSBuild property analysis with inner/outer element scoping
+			- Built-in logging and error handling for reliable automation
+			
+			Ideal for build automation, CI/CD pipelines, and project management tasks that require deep .NET project structure analysis.
+			]]>
+		</Description>
+		<PackageReadmeFile>Readme.md</PackageReadmeFile>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageIcon>eigenverft-logo-v7-harbor-square_128_128.png</PackageIcon>
+		<PackageReleaseNotes>$([System.IO.File]::ReadAllText("$(MSBuildThisFileDirectory)AddPackageFiles\ReleaseNotes.txt"))</PackageReleaseNotes>
+	</PropertyGroup>
+
+	<!-- In pack add additional files to the package root directory of the nuget. -->
+	<ItemGroup Condition="'$(Stage)' == 'pack'">
+		<None Include="$(MSBuildProjectDirectory)\AddPackageFiles\**\*" Exclude="$(MSBuildProjectDirectory)\AddPackageFiles\ReleaseNotes.txt" Pack="true" PackagePath="" />
+	</ItemGroup>
+	<ItemGroup>
+	  <Reference Include="System.Windows.Forms" />
+	</ItemGroup>
+
+	<PropertyGroup Condition="'$(Stage)' == 'publish'">
+		<!-- Specify the target runtime; adjust as needed (e.g., win-x86, linux-x64) -->
+		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
+
+		<SelfContained>true</SelfContained>
+		<!-- Enable single-file publish -->
+		<PublishSingleFile>false</PublishSingleFile>
+		<!-- Enable compression to reduce the size of the single-file executable -->
+		<EnableCompressionInSingleFile>false</EnableCompressionInSingleFile>
+		<!-- Ensure native libraries are extracted at runtime -->
+		<IncludeNativeLibrariesForSelfExtract>false</IncludeNativeLibrariesForSelfExtract>
+	</PropertyGroup>
+
+	<Target Name="PublishToolNameTo" AfterTargets="Publish" Condition="'$(PackAsTool)' == 'true' ">
+		<PropertyGroup>
+			<NewExeName>$(ToolCommandName).exe</NewExeName>
+		</PropertyGroup>
+
+		<!-- Locate the original exe output -->
+		<ItemGroup>
+			<PublishedExe Include="$(PublishDir)$(AssemblyName).exe" Condition="Exists('$(PublishDir)$(AssemblyName).exe')" />
+		</ItemGroup>
+		<Message Text="Renaming $(AssemblyName).exe to $(NewExeName) in $(PublishDir)" Importance="High" />
+		<Move SourceFiles="@(PublishedExe)" DestinationFiles="$(PublishDir)$(NewExeName)" />
+	</Target>
 
 </Project>

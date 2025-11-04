@@ -149,29 +149,48 @@ foreach ($SolutionProjectPaths in $SolutionProjectPaths) {
         $DocsDirectory = New-Directory -Paths @($DocsRootPath,$SolutionFileInfo.BaseName,$ProjectFileInfo.BaseName,$ChannelVersionRelativePath)
 
         $DotnetCommonParameters = @(
-            "--verbosity",
-            "minimal",
-            "-p:""Deterministic=true""",
-            "-p:""ContinuousIntegrationBuild=true""",
-            "-p:""VersionBuild=$($GeneratedVersion.VersionBuild)""",
-            "-p:""VersionMajor=$($GeneratedVersion.VersionMajor)""",
-            "-p:""VersionMinor=$($GeneratedVersion.VersionMinor)""",
-            "-p:""VersionRevision=$($GeneratedVersion.VersionRevision)""",
-            "-p:""VersionSuffix=$($BranchDeploymentConfig.Affix.Suffix)""",
-            "-p:""BaseOutputPath=$($BuildBinDirectory)/""",
-            "-p:""IntermediateOutputPath=$($BuildObjDirectory)/""",
-            "-p:""UseSharedCompilation=false""",
+            "-p:Configuration=Release",
+            "-p:Platform=AnyCPU",
+            "-v:minimal",
+            "-p:Deterministic=true",
+            "-p:ContinuousIntegrationBuild=true",
+            "-p:VersionBuild=$($GeneratedVersion.VersionBuild)",
+            "-p:VersionMajor=$($GeneratedVersion.VersionMajor)",
+            "-p:VersionMinor=$($GeneratedVersion.VersionMinor)",
+            "-p:VersionRevision=$($GeneratedVersion.VersionRevision)",
+            "-p:VersionSuffix=$($BranchDeploymentConfig.Affix.Suffix)",
+            "-p:BaseOutputPath=$($BuildBinDirectory)/",
+            "-p:IntermediateOutputPath=$($BuildObjDirectory)/",
+            "-p:UseSharedCompilation=false",
             "-m:1"
         )
+
+        $TargetFrameworkProject = Invoke-Exec -Executable "bbdist" -Arguments @("csproj", "--file", "$($ProjectFileInfo.FullName)", "--property", "TargetFrameworkVersion") -ReturnType Objects -AllowedExitCodes @(0,14)
+        
+        $IsSDKProject = $false
+        $IsNonSDKProject = $false
+        if ($LASTEXITCODE -eq 14) {
+            $IsSDKProject = $true
+        } elseif ($LASTEXITCODE -eq 0){
+            $IsNonSDKProject = $true
+        }
+
+        if ($IsNonSDKProject)
+        {
+            Write-Host "Skipping non-SDK style project: $($ProjectFileInfo.FullName)"
+            continue
+        }
 
         # Dotnet projects staged operations
         $IsTestProject = Invoke-Exec -Executable "bbdist" -Arguments @("csproj", "--file", "$($ProjectFileInfo.FullName)", "--property", "IsTestProject") -ReturnType Objects
         $IsPackable = Invoke-Exec -Executable "bbdist" -Arguments @("csproj", "--file", "$($ProjectFileInfo.FullName)", "--property", "IsPackable") -ReturnType Objects
         $IsPublishable = Invoke-Exec -Executable "bbdist" -Arguments @("csproj", "--file", "$($ProjectFileInfo.FullName)", "--property", "IsPublishable") -ReturnType Objects
 
-        Invoke-Exec -Executable "dotnet" -Arguments @("clean", """$($ProjectFileInfo.FullName)""", "-c", "Release","-p:""Stage=clean""")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
-        Invoke-Exec -Executable "dotnet" -Arguments @("restore", """$($ProjectFileInfo.FullName)""", "-p:""Stage=restore""")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
-        Invoke-Exec -Executable "dotnet" -Arguments @("build", """$($ProjectFileInfo.FullName)""", "-c", "Release","-p:""Stage=build""")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
+        Invoke-Exec -Executable "dotnet" -Arguments @("clean", "$($ProjectFileInfo.FullName)", "-p:Stage=clean")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
+        Invoke-Exec -Executable "dotnet" -Arguments @("restore", "$($ProjectFileInfo.FullName)", "-p:Stage=restore")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
+        #Invoke-Exec -Executable "dotnet" -Arguments @("build", "$($ProjectFileInfo.FullName)", "-p:Stage=build")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
+
+        Invoke-Exec -Executable "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" -Arguments @("$($ProjectFileInfo.FullName)", "-p:Stage=build")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
 
         if (($IsPackable -eq $true) -or ($IsPublishable -eq $true))
         {

@@ -1,3 +1,5 @@
+using System.Windows.Forms;
+
 namespace WinFormsAppSDK
 {
     public partial class Form1 : Form
