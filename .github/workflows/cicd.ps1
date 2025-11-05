@@ -191,8 +191,10 @@ foreach ($SolutionProjectPaths in $SolutionProjectPaths) {
         Invoke-Exec -Executable "dotnet" -Arguments @("clean", "$($ProjectFileInfo.FullName)", "-p:Stage=clean")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
         Invoke-Exec -Executable "dotnet" -Arguments @("restore", "$($ProjectFileInfo.FullName)", "-p:Stage=restore")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
         #Invoke-Exec -Executable "dotnet" -Arguments @("build", "$($ProjectFileInfo.FullName)", "-p:Stage=build")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
-
+        
+        #"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe
         Invoke-Exec -Executable "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" -Arguments @("$($ProjectFileInfo.FullName)", "-p:Stage=build")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
+        
 
         if (($IsPackable -eq $true) -or ($IsPublishable -eq $true))
         {
