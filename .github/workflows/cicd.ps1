@@ -105,8 +105,11 @@ $DocFxConfigFileInfos = Find-FilesByPattern -Path (Get-Path -Paths @("$ConfigRoo
 
 # Enable github specific nuget sources.
 $GitHubPackagesUser = "eigenverft"
-$GitHubSourceName = "githubeigenverft"
+$GitHubSourceName = "github"
 $GitHubSourceUri = "https://nuget.pkg.github.com/$GitHubPackagesUser/index.json"
+$NuGetTestSourceUri = "https://apiint.nugettest.org/v3/index.json"
+$NuGetOrgSourceUri = "https://api.nuget.org/v3/index.json"
+Unregister-LocalNuGetDotNetPackageSource -SourceName "$GitHubSourceName"
 Invoke-Exec -Executable "dotnet" -Arguments @("nuget","add", "source", "--username", "$GitHubPackagesUser","--password","$NUGET_GITHUB_PUSH","--store-password-in-clear-text","--name","$GitHubSourceName","$GitHubSourceUri") -CaptureOutput $false -CaptureOutputDump $false -HideValues @($NUGET_GITHUB_PUSH)
 
 # Enable the .NET tools specified in the manifest file
@@ -135,7 +138,7 @@ $SolutionFileInfos = Find-FilesByPattern -Path "$GitRepositoryRoot\source" -Patt
 $SolutionProjectPaths = @()
 foreach ($solutionFile in $SolutionFileInfos) {
     # all ready sorted by the bbdist
-    $CurrentProjectPaths = Invoke-Exec -Executable "bbdist" -Arguments @( "sln", "--file", "$($solutionFile.FullName)") -ReturnType 'Strings'
+    $CurrentProjectPaths = Invoke-ProcessTyped -Executable "drydock.exe" -Arguments @( "sln", "--location", "$($solutionFile.FullName)") -ReturnType 'Objects'
     $SolutionProjectPaths += [pscustomobject]@{ Sln =$solutionFile; Prj = ($CurrentProjectPaths | ForEach-Object { Get-Item $_ }) };
 }
 
@@ -339,11 +342,7 @@ foreach ($SolutionProjectPaths in $SolutionProjectPaths) {
 
 # Resolving deployment information for the current branch
 $DeploymentChannel = $BranchDeploymentConfig.Channel.Value
-$GitHubPackagesUser = "eigenverft"
-$GitHubSourceName = "github"
-$GitHubSourceUri = "https://nuget.pkg.github.com/$GitHubPackagesUser/index.json"
-$NuGetTestSourceUri = "https://apiint.nugettest.org/v3/index.json"
-$NuGetOrgSourceUri = "https://api.nuget.org/v3/index.json"
+
 
 $BinaryDropRootPath = "C:\temp\$GitRepositoryName-drops"
 
