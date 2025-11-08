@@ -133,6 +133,9 @@ foreach ($solutionFile in $SolutionFileInfos) {
     $SolutionProjectPaths += [pscustomobject]@{ Sln =$solutionFile; Prj = ($CurrentProjectPaths | ForEach-Object { Get-Item $_ }) };
 }
 
+$Vswhere = Find-FilesByPattern -Path "${env:ProgramFiles(x86)}\Microsoft Visual Studio" -Pattern "vswhere.exe"
+$MsBuildVs = Invoke-ProcessTyped -Executable "$Vswhere" -Arguments @("-latest", "-products","*", "-requires","Microsoft.Component.MSBuild", "-find", "**\Bin\MSBuild.exe") -ReturnType Objects
+
 # Build, Test, Pack, Publish, and Generate Reports for each project in the solution.
 foreach ($SolutionProjectPaths in $SolutionProjectPaths) {
     foreach ($ProjectFileInfo in $SolutionProjectPaths.Prj) {
@@ -165,36 +168,76 @@ foreach ($SolutionProjectPaths in $SolutionProjectPaths) {
             "-m:1"
         )
 
-        $TargetFrameworkProject = Invoke-Exec -Executable "bbdist" -Arguments @("csproj", "--file", "$($ProjectFileInfo.FullName)", "--property", "TargetFrameworkVersion") -ReturnType Objects -AllowedExitCodes @(0,14)
-        
-        $IsSDKProject = $false
-        $IsNonSDKProject = $false
-        if ($LASTEXITCODE -eq 14) {
-            $IsSDKProject = $true
-        } elseif ($LASTEXITCODE -eq 0){
-            $IsNonSDKProject = $true
-        }
+        $NonSDKParameters = @(
+            "-p:Configuration=Release",
+            "-p:Platform=AnyCPU",
+            "-v:minimal",
+            "-p:VersionBuild=$($GeneratedVersion.VersionBuild)",
+            "-p:VersionMajor=$($GeneratedVersion.VersionMajor)",
+            "-p:VersionMinor=$($GeneratedVersion.VersionMinor)",
+            "-p:VersionRevision=$($GeneratedVersion.VersionRevision)",
+            "-p:VersionSuffix=$($BranchDeploymentConfig.Affix.Suffix)",
+            "-p:OutputPath=$($BuildBinDirectory)/",
+            "-p:BaseIntermediateOutputPath=$($BuildObjDirectory)/",
+            "-p:UseSharedCompilation=false"
+        )
 
-        if ($IsNonSDKProject)
-        {
-            Write-Host "Skipping non-SDK style project: $($ProjectFileInfo.FullName)"
-            continue
+
+        $TargetFrameworkVersion = Invoke-Exec -Executable "bbdist" -Arguments @("csproj", "--file", "$($ProjectFileInfo.FullName)", "--property", "TargetFrameworkVersion") -ReturnType Objects -AllowedExitCodes @(0,14)
+        
+        $UseVSMsbuild = $false
+        $UseDotNetBuild = $false
+        $IsSDKProj = $false
+
+        # TargetFrameworkVersion not found assume sdk project style and get TargetFramework
+        if ($LASTEXITCODE -eq 14) {
+            $TargetFramework = Invoke-ProcessTyped -Executable "bbdist" -Arguments @("csproj", "--file", "$($ProjectFileInfo.FullName)", "--property", "TargetFramework") -ReturnType Objects
+            $IsSDKProj = $true
+            if ($TargetFramework -in @('net20', 'net35', 'net40', 'net403', 'net45', 'net451', 'net452', 'net46', 'net461', 'net462', 'net47', 'net471', 'net472', 'net48', 'net481'))
+            {
+               $UseVSMsbuild = $true
+               $UseDotNetBuild = $false
+            }
+            else {
+                $UseVSMsbuild = $false
+                $UseDotNetBuild = $true
+            }
+        } elseif ($LASTEXITCODE -eq 0){
+            $UseVSMsbuild = $true
+            $UseDotNetBuild = $false
+            $IsSDKProj = $false
         }
- 
-        # Dotnet projects staged operations
-        $IsTestProject = Invoke-Exec -Executable "bbdist" -Arguments @("csproj", "--file", "$($ProjectFileInfo.FullName)", "--property", "IsTestProject") -ReturnType Objects
-        $IsPackable = Invoke-Exec -Executable "bbdist" -Arguments @("csproj", "--file", "$($ProjectFileInfo.FullName)", "--property", "IsPackable") -ReturnType Objects
-        $IsPublishable = Invoke-Exec -Executable "bbdist" -Arguments @("csproj", "--file", "$($ProjectFileInfo.FullName)", "--property", "IsPublishable") -ReturnType Objects
 
         # Sequence for framework and dotnet core projects , restore,clean,restore needed for proper incremental build
         Invoke-Exec -Executable "dotnet" -Arguments @("restore", "$($ProjectFileInfo.FullName)", "-p:Stage=restore")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
         Invoke-Exec -Executable "dotnet" -Arguments @("clean", "$($ProjectFileInfo.FullName)", "-p:Stage=clean")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
         Invoke-Exec -Executable "dotnet" -Arguments @("restore", "$($ProjectFileInfo.FullName)", "-p:Stage=restore")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
-        #Invoke-Exec -Executable "dotnet" -Arguments @("build", "$($ProjectFileInfo.FullName)", "-p:Stage=build")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
         
-        #"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe
-        Invoke-Exec -Executable "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" -Arguments @("$($ProjectFileInfo.FullName)", "-p:Stage=build")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
-        
+        if ($UseVSMsbuild)
+        {
+            if ($IsSDKProj)
+            {
+                Invoke-Exec -Executable "$MsBuildVs" -Arguments @("$($ProjectFileInfo.FullName)", "-p:Stage=build")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
+            }
+            else {
+                Invoke-Exec -Executable "$MsBuildVs" -Arguments @("$($ProjectFileInfo.FullName)", "-p:Stage=build")  -CommonArguments $NonSDKParameters -CaptureOutput $false
+            }
+        }
+
+        if ($UseDotNetBuild)
+        {
+            Invoke-Exec -Executable "dotnet" -Arguments @("build","$($ProjectFileInfo.FullName)", "-p:Stage=build")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
+        }
+
+        $IsTestProject = $false
+        $IsPackable = $false
+        $IsPublishable = $false
+        if ($IsSDKProj)
+        {
+            $IsTestProject = Invoke-ProcessTyped -Executable "bbdist" -Arguments @("csproj", "--file", "$($ProjectFileInfo.FullName)", "--property", "IsTestProject") -ReturnType Objects
+            $IsPackable = Invoke-ProcessTyped -Executable "bbdist" -Arguments @("csproj", "--file", "$($ProjectFileInfo.FullName)", "--property", "IsPackable") -ReturnType Objects
+            $IsPublishable = Invoke-ProcessTyped -Executable "bbdist" -Arguments @("csproj", "--file", "$($ProjectFileInfo.FullName)", "--property", "IsPublishable") -ReturnType Objects
+        }
 
         if (($IsPackable -eq $true) -or ($IsPublishable -eq $true))
         {
@@ -235,7 +278,11 @@ foreach ($SolutionProjectPaths in $SolutionProjectPaths) {
         {
             Invoke-Exec -Executable "dotnet" -Arguments @("publish", "$($ProjectFileInfo.FullName)", "-c", "Release","-p:""Stage=publish""","-p:""PublishDir=$($PublishDirectory)""")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
         }
-        
+
+        if (-not($IsSDKProj)) {
+            Copy-FilesRecursively -SourceDirectory "$($BuildBinDirectory)" -DestinationDirectory "$($PublishDirectory)" -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
+        }
+         
         if ($IsPackable -eq $true)
         {
             $DocFxReplacementsByToken = @{
