@@ -7,7 +7,6 @@
 
 	<!-- General build settings: defines the output type and target frameworks -->
 	<PropertyGroup>
-		<OutputType>Exe</OutputType>
 		<TargetFramework>net8.0</TargetFramework>
 		<TargetFrameworks>net8.0;net9.0</TargetFrameworks>
 		<SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
@@ -19,7 +18,7 @@
 	<!-- Packaging and publish configuration -->
 	<PropertyGroup>
 		<IsPackable>false</IsPackable>
-		<IsPublishable>true</IsPublishable>
+		<IsPublishable>false</IsPublishable>
 		<IsTestProject>false</IsTestProject>
 		<PackAsTool>false</PackAsTool>
 	</PropertyGroup>
@@ -82,9 +81,6 @@
 	<!-- In pack add additional files to the package root directory of the nuget. -->
 	<ItemGroup Condition="'$(Stage)' == 'pack'">
 		<None Include="$(MSBuildProjectDirectory)\AddPackageFiles\**\*" Exclude="$(MSBuildProjectDirectory)\AddPackageFiles\ReleaseNotes.txt" Pack="true" PackagePath="" />
-	</ItemGroup>
-	<ItemGroup>
-	  <ProjectReference Include="..\ClassLibrary1\ClassLibrary1.csproj" />
 	</ItemGroup>
 
 	<PropertyGroup Condition="'$(Stage)' == 'publish'">

@@ -182,7 +182,6 @@ foreach ($SolutionProjectPaths in $SolutionProjectPaths) {
             "-p:UseSharedCompilation=false"
         )
 
-
         $TargetFrameworkVersion = Invoke-Exec -Executable "bbdist" -Arguments @("csproj", "--file", "$($ProjectFileInfo.FullName)", "--property", "TargetFrameworkVersion") -ReturnType Objects -AllowedExitCodes @(0,14)
         
         $UseVSMsbuild = $false
@@ -191,16 +190,22 @@ foreach ($SolutionProjectPaths in $SolutionProjectPaths) {
 
         # TargetFrameworkVersion not found assume sdk project style and get TargetFramework
         if ($LASTEXITCODE -eq 14) {
-            $TargetFramework = Invoke-ProcessTyped -Executable "bbdist" -Arguments @("csproj", "--file", "$($ProjectFileInfo.FullName)", "--property", "TargetFramework") -ReturnType Objects
-            $IsSDKProj = $true
-            if ($TargetFramework -in @('net20', 'net35', 'net40', 'net403', 'net45', 'net451', 'net452', 'net46', 'net461', 'net462', 'net47', 'net471', 'net472', 'net48', 'net481'))
+            $TargetFramework = Invoke-ProcessTyped -Executable "bbdist" -Arguments @("csproj", "--file", "$($ProjectFileInfo.FullName)", "--property", "TargetFramework") -ReturnType Objects -AllowedExitCodes @(0,14)
+            if ($LASTEXITCODE -eq 14)
             {
-               $UseVSMsbuild = $true
-               $UseDotNetBuild = $false
-            }
-            else {
-                $UseVSMsbuild = $false
-                $UseDotNetBuild = $true
+                $TargetFrameworks = Invoke-ProcessTyped -Executable "bbdist" -Arguments @("csproj", "--file", "$($ProjectFileInfo.FullName)", "--property", "TargetFrameworks") -ReturnType Objects -AllowedExitCodes @(0)
+                $TargetFrameworks = $TargetFrameworks.Split(';')
+            } elseif ($LASTEXITCODE -eq 0) {
+                $IsSDKProj = $true
+                if ($TargetFramework -in @('net20', 'net35', 'net40', 'net403', 'net45', 'net451', 'net452', 'net46', 'net461', 'net462', 'net47', 'net471', 'net472', 'net48', 'net481'))
+                {
+                    $UseVSMsbuild = $true
+                    $UseDotNetBuild = $false
+                }
+                else {
+                    $UseVSMsbuild = $false
+                    $UseDotNetBuild = $true
+                }
             }
         } elseif ($LASTEXITCODE -eq 0){
             $UseVSMsbuild = $true
