@@ -170,12 +170,12 @@ namespace Eigenverft.Distributed.Drydock.Services
             {
                 if (scopeType.Value == CsProjCommand.ElementScope.inner)
                 {
-                    _logger.LogDebug("Returning inner element value for property '{PropertyName}' from project: {ProjectLocation}", propertyName, projectLocation);
+                    // _logger.LogDebug("Returning inner element value for property '{PropertyName}' from project: {ProjectLocation}", propertyName, projectLocation);
                     return property.Value;
                 }
                 else
                 {
-                    _logger.LogDebug("Returning outer element value for property '{PropertyName}' from project: {ProjectLocation}", propertyName, projectLocation);
+                    // _logger.LogDebug("Returning outer element value for property '{PropertyName}' from project: {ProjectLocation}", propertyName, projectLocation);
                     return property.OuterElement;
                 }
             }

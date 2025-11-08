@@ -22,19 +22,20 @@ namespace Eigenverft.Distributed.Drydock.CommandDefinition
         {
             try
             {
-                var sourceDirectory = parseResult.GetRequiredValue(CsProjCommand.Location);
-                var outputArchive = parseResult.GetRequiredValue(CsProjCommand.Property);
-                
-                var result = await _solutionProjectService.GetProjectProperty(sourceDirectory, outputArchive, CsProjCommand.ElementScope.inner, cancellationToken);
-
+                var location = parseResult.GetRequiredValue(CsProjCommand.Location);
                 var propertyName = parseResult.GetRequiredValue(CsProjCommand.Property);
+                var scope = parseResult.GetRequiredValue(CsProjCommand.Scope);
+
+                var result = await _solutionProjectService.GetProjectProperty(location, propertyName, scope, cancellationToken);
+
                 if (!string.IsNullOrEmpty(result))
                 {
-                    _logger.LogInformation("Property '{Property}' from '{ProjectFile}' = {Value}", propertyName, sourceDirectory, result);
+                    Console.WriteLine(result);
+                    //_logger.LogInformation("Property '{Property}' from '{ProjectFile}' = {Value}", propertyName, location, result);
                 }
                 else
                 {
-                    _logger.LogWarning("Property '{Property}' was not found or is empty in project: {ProjectFile}", propertyName, sourceDirectory);
+                    _logger.LogWarning("Property '{Property}' was not found or is empty in project: {ProjectFile}", propertyName, location);
                     return -1;
                 }
             }

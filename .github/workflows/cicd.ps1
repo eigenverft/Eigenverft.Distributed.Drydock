@@ -359,7 +359,7 @@ $CopyToZipDrop = $false
 if ($DeploymentChannel -in @("development"))
 {
     $PushToLocalSource = $true
-    $PushToGitHubSource = $true
+    $PushToGitHubSource = $false
     $PushToNuGetTest = $false
     $PushToNuGetOrg = $false
 
