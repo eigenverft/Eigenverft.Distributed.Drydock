@@ -98,7 +98,7 @@
 		<EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
 		<!-- Ensure native libraries are extracted at runtime -->
 		<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-		<PublishTrimmed>true</PublishTrimmed>
+		<PublishTrimmed>false</PublishTrimmed>
 	</PropertyGroup>
 
 	<Target Name="PublishToolNameTo" AfterTargets="Publish" Condition="'$(PackAsTool)' == 'true' ">

@@ -7,7 +7,6 @@
 
 	<!-- General build settings: defines the output type and target frameworks -->
 	<PropertyGroup>
-		<TargetFramework>net8.0</TargetFramework>
 		<TargetFrameworks>net8.0;net9.0</TargetFrameworks>
 		<SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
 		<CheckEolTargetFramework>false</CheckEolTargetFramework>

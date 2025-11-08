@@ -190,11 +190,31 @@ foreach ($SolutionProjectPaths in $SolutionProjectPaths) {
 
         # TargetFrameworkVersion not found assume sdk project style and get TargetFramework
         if ($LASTEXITCODE -eq 14) {
+            
             $TargetFramework = Invoke-ProcessTyped -Executable "bbdist" -Arguments @("csproj", "--file", "$($ProjectFileInfo.FullName)", "--property", "TargetFramework") -ReturnType Objects -AllowedExitCodes @(0,14)
             if ($LASTEXITCODE -eq 14)
             {
                 $TargetFrameworks = Invoke-ProcessTyped -Executable "bbdist" -Arguments @("csproj", "--file", "$($ProjectFileInfo.FullName)", "--property", "TargetFrameworks") -ReturnType Objects -AllowedExitCodes @(0)
                 $TargetFrameworks = $TargetFrameworks.Split(';')
+                $IsDotNetFramework = $false
+                foreach ($TargetFrame in $TargetFrameworks)
+                {
+                    if ($TargetFrame.Trim().ToLowerInvariant() -in @('net20', 'net35', 'net40', 'net403', 'net45', 'net451', 'net452', 'net46', 'net461', 'net462', 'net47', 'net471', 'net472', 'net48', 'net481'))
+                    {
+                        $IsDotNetFramework = $true
+                        break;
+                    }
+                }
+                if ($IsDotNetFramework)
+                {
+                    $UseVSMsbuild = $true
+                    $UseDotNetBuild = $false
+                }
+                else {
+                    $UseVSMsbuild = $false
+                    $UseDotNetBuild = $true
+                }
+                $foo = 1
             } elseif ($LASTEXITCODE -eq 0) {
                 $IsSDKProj = $true
                 if ($TargetFramework -in @('net20', 'net35', 'net40', 'net403', 'net45', 'net451', 'net452', 'net46', 'net461', 'net462', 'net47', 'net471', 'net472', 'net48', 'net481'))
