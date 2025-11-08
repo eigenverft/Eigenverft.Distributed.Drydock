@@ -103,6 +103,12 @@ $DocFxTemplatePath = Get-Path -Paths @("$ConfigRootPath","docfx","build","docfx_
 $IndexTemplatePath = Get-Path -Paths @("$ConfigRootPath","docfx","build","index.template.md")
 $DocFxConfigFileInfos = Find-FilesByPattern -Path (Get-Path -Paths @("$ConfigRootPath","docfx")) -Pattern "docfx_local.json"
 
+# Enable github specific nuget sources.
+$GitHubPackagesUser = "eigenverft"
+$GitHubSourceName = "githubeigenverft"
+$GitHubSourceUri = "https://nuget.pkg.github.com/$GitHubPackagesUser/index.json"
+Invoke-Exec -Executable "dotnet" -Arguments @("nuget","add", "source", "--username", "$GitHubPackagesUser","--password","$NUGET_GITHUB_PUSH","--store-password-in-clear-text","--name","$GitHubSourceName","$GitHubSourceUri") -CaptureOutput $false -CaptureOutputDump $false -HideValues @($NUGET_GITHUB_PUSH)
+
 # Enable the .NET tools specified in the manifest file
 Enable-TempDotnetTools -ManifestFile "$DotNetToolsManifestPath" -NoReturn
 
@@ -412,7 +418,6 @@ if ($PushToLocalSource -eq $true)
 if ($PushToGitHubSource -eq $true)
 {
     $NuGetPackageFileInfos = Find-FilesByPattern -Path "$PackRootPath" -Pattern "*.nupkg"
-    Invoke-Exec -Executable "dotnet" -Arguments @("nuget","add", "source", "--username", "$GitHubPackagesUser","--password","$NUGET_GITHUB_PUSH","--store-password-in-clear-text","--name","$GitHubSourceName","$GitHubSourceUri") -CaptureOutput $false -CaptureOutputDump $false -HideValues @($NUGET_GITHUB_PUSH)
     foreach ($NuGetPackageFileInfo in $NuGetPackageFileInfos)
     {
         Invoke-Exec -Executable "dotnet" -Arguments @("nuget","push", "$($NuGetPackageFileInfo.FullName)", "--api-key", "$NUGET_GITHUB_PUSH","--source","$GitHubSourceName") -CaptureOutput $false -CaptureOutputDump $false -HideValues @($NUGET_GITHUB_PUSH)
