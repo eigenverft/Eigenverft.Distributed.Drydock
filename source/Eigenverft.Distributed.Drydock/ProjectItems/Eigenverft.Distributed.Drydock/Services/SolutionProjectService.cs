@@ -56,7 +56,6 @@ namespace Eigenverft.Distributed.Drydock.Services
             List<string> retval = new List<string>();
             try
             {
-                _logger.LogInformation( "Failed to open project file: {solutionLocation}", solutionLocation);
 
                 List<ProjectInSolution> sln = SolutionFile.Parse(solutionLocation).ProjectsInOrder.Where(e => e.ProjectType == SolutionProjectType.KnownToBeMSBuildFormat).ToList();
                 List<ProjectRootElement> projects = new List<ProjectRootElement>();
@@ -75,8 +74,6 @@ namespace Eigenverft.Distributed.Drydock.Services
                             ["Platform"] = "AnyCPU",
                             //["MSBuildRuntimeType"] = "Core"
                         };
-
-                        _logger.LogInformation("item.AbsolutePath: {ProjectLocation}", item.AbsolutePath);
 
                         //var projectload = new Project(item.AbsolutePath, globalProperties, null);
 
@@ -106,6 +103,10 @@ namespace Eigenverft.Distributed.Drydock.Services
                     )
                 ).ToList();
 
+                nonTestProjects = nonTestProjects.OrderBy(
+                    i => i.Items.Any(f => f.ElementName.Contains("ProjectReference"))
+                    ).ToList();
+
                 foreach (var item in testProjects)
                 {
                     retval.Add(item.FullPath);
@@ -122,10 +123,11 @@ namespace Eigenverft.Distributed.Drydock.Services
                 if (retval.Count == 0)
                 {
                     _logger.LogWarning("No csproj files were found in the solution: {SolutionLocation}", solutionLocation);
+                    return null;
                 }
                 else
                 {
-                    _logger.LogDebug("Found {Count} csproj files in the solution: {SolutionLocation}", retval.Count, solutionLocation);
+                    //_logger.LogDebug("Found {Count} csproj files in the solution: {SolutionLocation}", retval.Count, solutionLocation);
                 }
             }
             catch (Exception ex)

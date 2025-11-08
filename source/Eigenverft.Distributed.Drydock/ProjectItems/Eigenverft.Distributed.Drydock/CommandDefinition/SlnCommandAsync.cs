@@ -33,8 +33,13 @@ namespace Eigenverft.Distributed.Drydock.CommandDefinition
 
                 if (result.Count > 0)
                 {
-                    _logger.LogInformation("Retrieved {Count} project path(s) from solution: {SolutionPath}", result.Count, sourceDirectory);
-                    _logger.LogDebug("Project paths: {ProjectPaths}", string.Join(";", result));
+                    foreach (var item in result)
+                    {
+                        Console.WriteLine(item);
+                    }
+
+                    // _logger.LogInformation("Retrieved {Count} project path(s) from solution: {SolutionPath}", result.Count, sourceDirectory);
+                    // _logger.LogDebug("Project paths: {ProjectPaths}", string.Join(";", result));
                 }
                 else
                 {

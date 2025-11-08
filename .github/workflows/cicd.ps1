@@ -182,7 +182,7 @@ foreach ($SolutionProjectPaths in $SolutionProjectPaths) {
             "-p:UseSharedCompilation=false"
         )
 
-        $TargetFrameworkVersion = Invoke-Exec -Executable "bbdist" -Arguments @("csproj", "--file", "$($ProjectFileInfo.FullName)", "--property", "TargetFrameworkVersion") -ReturnType Objects -AllowedExitCodes @(0,14)
+        Invoke-Exec -Executable "bbdist" -Arguments @("csproj", "--file", "$($ProjectFileInfo.FullName)", "--property", "TargetFrameworkVersion") -ReturnType Objects -AllowedExitCodes @(0,14)
         
         $UseVSMsbuild = $false
         $UseDotNetBuild = $false
