@@ -2,13 +2,6 @@
   "version": 1,
   "isRoot": true,
   "tools": {
-    "BlackBytesBox.Distributed": {
-      "version": "0.1.20251.15430",
-      "commands": [
-        "bbdist"
-      ],
-      "rollForward": false
-    },
     "nuget-license": {
       "version": "3.1.1",
       "commands": [
@@ -24,7 +17,7 @@
       "rollForward": false
     },
     "Eigenverft.Distributed.Drydock": {
-      "version": "0.1.20256.27133-dev",
+      "version": "0.1.20256.28408-dev",
       "commands": [
         "drydock"
       ],

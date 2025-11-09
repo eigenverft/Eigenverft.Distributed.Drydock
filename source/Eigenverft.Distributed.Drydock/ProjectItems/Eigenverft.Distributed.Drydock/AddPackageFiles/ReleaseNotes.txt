@@ -1,4 +1,4 @@
-﻿Release Notes – 0.1.* (2025-10-05)
+﻿Release Notes – 0.1.* (2025-10-06)
 ===================================
 
 Status: Early Development Phase

@@ -137,7 +137,7 @@ $DocsRootPath = Get-Path -Paths @("$OutputRootPath","docs")
 $SolutionFileInfos = Find-FilesByPattern -Path "$GitRepositoryRoot\source" -Pattern "*.sln"
 $SolutionProjectPaths = @()
 foreach ($solutionFile in $SolutionFileInfos) {
-    # all ready sorted by the bbdist
+    # all ready sorted by the drydock.exe
     $CurrentProjectPaths = Invoke-ProcessTyped -Executable "drydock.exe" -Arguments @( "sln", "--location", "$($solutionFile.FullName)") -ReturnType 'Objects'
     $SolutionProjectPaths += [pscustomobject]@{ Sln =$solutionFile; Prj = ($CurrentProjectPaths | ForEach-Object { Get-Item $_ }) };
 }
@@ -191,19 +191,19 @@ foreach ($SolutionProjectPaths in $SolutionProjectPaths) {
             "-p:UseSharedCompilation=false"
         )
 
-        Invoke-Exec -Executable "bbdist" -Arguments @("csproj", "--file", "$($ProjectFileInfo.FullName)", "--property", "TargetFrameworkVersion") -ReturnType Objects -AllowedExitCodes @(0,14)
+        Invoke-ProcessTyped -Executable "drydock.exe" -Arguments @("csproj", "--location", "$($ProjectFileInfo.FullName)", "--property", "TargetFrameworkVersion") -ReturnType Objects -AllowedExitCodes @(0,-1) -CaptureOutput $false -CaptureOutputDump $true
         
         $UseVSMsbuild = $false
         $UseDotNetBuild = $false
         $IsSDKProj = $false
 
         # TargetFrameworkVersion not found assume sdk project style and get TargetFramework
-        if ($LASTEXITCODE -eq 14) {
+        if ($LASTEXITCODE -eq -1) {
             
-            $TargetFramework = Invoke-ProcessTyped -Executable "bbdist" -Arguments @("csproj", "--file", "$($ProjectFileInfo.FullName)", "--property", "TargetFramework") -ReturnType Objects -AllowedExitCodes @(0,14)
-            if ($LASTEXITCODE -eq 14)
+            $TargetFramework = Invoke-ProcessTyped -Executable "drydock.exe" -Arguments @("csproj", "--location", "$($ProjectFileInfo.FullName)", "--property", "TargetFramework") -ReturnType Objects -AllowedExitCodes @(0,-1)
+            if ($LASTEXITCODE -eq -1)
             {
-                $TargetFrameworks = Invoke-ProcessTyped -Executable "bbdist" -Arguments @("csproj", "--file", "$($ProjectFileInfo.FullName)", "--property", "TargetFrameworks") -ReturnType Objects -AllowedExitCodes @(0)
+                $TargetFrameworks = Invoke-ProcessTyped -Executable "drydock.exe" -Arguments @("csproj", "--location", "$($ProjectFileInfo.FullName)", "--property", "TargetFrameworks") -ReturnType Objects -AllowedExitCodes @(0)
                 $TargetFrameworks = $TargetFrameworks.Split(';')
                 $IsDotNetFramework = $false
                 foreach ($TargetFrame in $TargetFrameworks)
@@ -242,24 +242,24 @@ foreach ($SolutionProjectPaths in $SolutionProjectPaths) {
         }
 
         # Sequence for framework and dotnet core projects , restore,clean,restore needed for proper incremental build
-        Invoke-Exec -Executable "dotnet" -Arguments @("restore", "$($ProjectFileInfo.FullName)", "-p:Stage=restore")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
-        Invoke-Exec -Executable "dotnet" -Arguments @("clean", "$($ProjectFileInfo.FullName)", "-p:Stage=clean")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
-        Invoke-Exec -Executable "dotnet" -Arguments @("restore", "$($ProjectFileInfo.FullName)", "-p:Stage=restore")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
+        Invoke-ProcessTyped -Executable "dotnet" -Arguments @("restore", "$($ProjectFileInfo.FullName)", "-p:Stage=restore") -ReturnType Objects -CommonArguments $DotnetCommonParameters
+        Invoke-ProcessTyped -Executable "dotnet" -Arguments @("clean", "$($ProjectFileInfo.FullName)", "-p:Stage=clean") -ReturnType Objects -CommonArguments $DotnetCommonParameters 
+        Invoke-ProcessTyped -Executable "dotnet" -Arguments @("restore", "$($ProjectFileInfo.FullName)", "-p:Stage=restore") -ReturnType Objects -CommonArguments $DotnetCommonParameters 
         
         if ($UseVSMsbuild)
         {
             if ($IsSDKProj)
             {
-                Invoke-Exec -Executable "$MsBuildVs" -Arguments @("$($ProjectFileInfo.FullName)", "-p:Stage=build")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
+                Invoke-ProcessTyped -Executable "$MsBuildVs" -Arguments @("$($ProjectFileInfo.FullName)", "-p:Stage=build")  -CommonArguments $DotnetCommonParameters -ReturnType Objects -CaptureOutput $true -CaptureOutputDump $false
             }
             else {
-                Invoke-Exec -Executable "$MsBuildVs" -Arguments @("$($ProjectFileInfo.FullName)", "-p:Stage=build")  -CommonArguments $NonSDKParameters -CaptureOutput $false
+                Invoke-ProcessTyped -Executable "$MsBuildVs" -Arguments @("$($ProjectFileInfo.FullName)", "-p:Stage=build") -CommonArguments $NonSDKParameters -ReturnType Objects -CaptureOutput $true -CaptureOutputDump $false
             }
         }
 
         if ($UseDotNetBuild)
         {
-            Invoke-Exec -Executable "dotnet" -Arguments @("build","$($ProjectFileInfo.FullName)", "-p:Stage=build")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
+            Invoke-ProcessTyped -Executable "dotnet" -Arguments @("build","$($ProjectFileInfo.FullName)", "-p:Stage=build")  -CommonArguments $DotnetCommonParameters -ReturnType Objects -CaptureOutput $true -CaptureOutputDump $false
         }
 
         $IsTestProject = $false
@@ -267,49 +267,49 @@ foreach ($SolutionProjectPaths in $SolutionProjectPaths) {
         $IsPublishable = $false
         if ($IsSDKProj)
         {
-            $IsTestProject = Invoke-ProcessTyped -Executable "bbdist" -Arguments @("csproj", "--file", "$($ProjectFileInfo.FullName)", "--property", "IsTestProject") -ReturnType Objects
-            $IsPackable = Invoke-ProcessTyped -Executable "bbdist" -Arguments @("csproj", "--file", "$($ProjectFileInfo.FullName)", "--property", "IsPackable") -ReturnType Objects
-            $IsPublishable = Invoke-ProcessTyped -Executable "bbdist" -Arguments @("csproj", "--file", "$($ProjectFileInfo.FullName)", "--property", "IsPublishable") -ReturnType Objects
+            $IsTestProject = Invoke-ProcessTyped -Executable "drydock.exe" -Arguments @("csproj", "--location", "$($ProjectFileInfo.FullName)", "--property", "IsTestProject") -ReturnType Objects
+            $IsPackable = Invoke-ProcessTyped -Executable "drydock.exe" -Arguments @("csproj", "--location", "$($ProjectFileInfo.FullName)", "--property", "IsPackable") -ReturnType Objects
+            $IsPublishable = Invoke-ProcessTyped -Executable "drydock.exe" -Arguments @("csproj", "--location", "$($ProjectFileInfo.FullName)", "--property", "IsPublishable") -ReturnType Objects
         }
 
         if (($IsPackable -eq $true) -or ($IsPublishable -eq $true))
         {
             #Dependency-Health-and-Inventory.Report
-            $VulnerabilitiesJson = Invoke-Exec -Executable "dotnet" -Arguments @("list", "$($ProjectFileInfo.FullName)", "package", "--vulnerable", "--format", "json")
+            $VulnerabilitiesJson = Invoke-ProcessTyped -Executable "dotnet" -Arguments @("list", "$($ProjectFileInfo.FullName)", "package", "--vulnerable", "--format", "json")
             New-DotnetVulnerabilitiesReport -jsonInput $VulnerabilitiesJson -OutputFile "$ReportsDirectory\Vulnerabilities.md" -OutputFormat markdown -ExitOnVulnerability $false
             New-DotnetVulnerabilitiesReport -jsonInput $VulnerabilitiesJson -OutputFile "$ReportsDirectory\Vulnerabilities.txt" -OutputFormat text -ExitOnVulnerability $false
         
-            $DeprecatedPackagesJson = Invoke-Exec -Executable "dotnet" -Arguments @("list", "$($ProjectFileInfo.FullName)", "package", "--deprecated", "--include-transitive", "--format", "json")
+            $DeprecatedPackagesJson = Invoke-ProcessTyped -Executable "dotnet" -Arguments @("list", "$($ProjectFileInfo.FullName)", "package", "--deprecated", "--include-transitive", "--format", "json")
             New-DotnetDeprecatedReport -jsonInput $DeprecatedPackagesJson -OutputFile "$ReportsDirectory\Deprecated.md" -OutputFormat markdown -IgnoreTransitivePackages $true -ExitOnDeprecated $false
             New-DotnetDeprecatedReport -jsonInput $DeprecatedPackagesJson -OutputFile "$ReportsDirectory\Deprecated.txt" -OutputFormat text -IgnoreTransitivePackages $true -ExitOnDeprecated $false
         
-            $OutdatedPackagesJson = Invoke-Exec -Executable "dotnet" -Arguments @("list", "$($ProjectFileInfo.FullName)", "package", "--outdated", "--include-transitive", "--format", "json")
+            $OutdatedPackagesJson = Invoke-ProcessTyped -Executable "dotnet" -Arguments @("list", "$($ProjectFileInfo.FullName)", "package", "--outdated", "--include-transitive", "--format", "json")
             New-DotnetOutdatedReport -jsonInput $OutdatedPackagesJson -OutputFile "$ReportsDirectory\Outdated.md" -OutputFormat markdown -IgnoreTransitivePackages $false
             New-DotnetOutdatedReport -jsonInput $OutdatedPackagesJson -OutputFile "$ReportsDirectory\Outdated.txt" -OutputFormat text -IgnoreTransitivePackages $false
         
-            $BillOfMaterialsJson = Invoke-Exec -Executable "dotnet" -Arguments @("list", "$($ProjectFileInfo.FullName)", "package", "--include-transitive", "--format", "json")
+            $BillOfMaterialsJson = Invoke-ProcessTyped -Executable "dotnet" -Arguments @("list", "$($ProjectFileInfo.FullName)", "package", "--include-transitive", "--format", "json")
             New-DotnetBillOfMaterialsReport -jsonInput $BillOfMaterialsJson -OutputFile "$ReportsDirectory\BillOfMaterials.md" -OutputFormat markdown -IgnoreTransitivePackages $true
             New-DotnetBillOfMaterialsReport -jsonInput $BillOfMaterialsJson -OutputFile "$ReportsDirectory\BillOfMaterials.txt" -OutputFormat text -IgnoreTransitivePackages $true
         
             Join-FileText -InputFiles @("$ReportsDirectory\BillOfMaterials.txt", "$ReportsDirectory\Vulnerabilities.txt","$ReportsDirectory\Deprecated.txt") -OutputFile "$ReportsDirectory\$($ProjectFileInfo.BaseName).Inventory-Health-Report.txt" -BetweenFiles 'One'
 
-            Invoke-Exec -Executable "nuget-license" -Arguments @("--input", "$($ProjectFileInfo.FullName)", "--allowed-license-types", "$NuGetAllowedLicensesPath", "--output", "JsonPretty", "--licenseurl-to-license-mappings" ,"$NuGetLicenseMappingsPath", "--file-output", "$ReportsDirectory/$($ProjectFileInfo.BaseName).ThirdPartyLicencesNotices.json" )
+            Invoke-ProcessTyped -Executable "nuget-license" -Arguments @("--input", "$($ProjectFileInfo.FullName)", "--allowed-license-types", "$NuGetAllowedLicensesPath", "--output", "JsonPretty", "--licenseurl-to-license-mappings" ,"$NuGetLicenseMappingsPath", "--file-output", "$ReportsDirectory/$($ProjectFileInfo.BaseName).ThirdPartyLicencesNotices.json" )
             New-ThirdPartyNotice -LicenseJsonPath "$ReportsDirectory/$($ProjectFileInfo.BaseName).ThirdPartyLicencesNotices.json" -OutputPath "$ReportsDirectory\$($ProjectFileInfo.BaseName).ThirdPartyLicencesNotices.txt" -Name "$($ProjectFileInfo.BaseName)"
         }
 
         if ($IsTestProject -eq $true)
         {
-            Invoke-Exec -Executable "dotnet" -Arguments @("test", "$($ProjectFileInfo.FullName)", "-c", "Release","-p:""Stage=test""")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
+            Invoke-ProcessTyped -Executable "dotnet" -Arguments @("test", "$($ProjectFileInfo.FullName)", "-c", "Release","-p:""Stage=test""")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
         }
 
         if ($IsPackable -eq $true)
         {
-            Invoke-Exec -Executable "dotnet" -Arguments @("pack", "$($ProjectFileInfo.FullName)", "-c", "Release","-p:""Stage=pack""","-p:""PackageOutputPath=$($PackDirectory)""")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
+            Invoke-ProcessTyped -Executable "dotnet" -Arguments @("pack", "$($ProjectFileInfo.FullName)", "-c", "Release","-p:""Stage=pack""","-p:""PackageOutputPath=$($PackDirectory)""")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
         }
 
         if ($IsPublishable -eq $true)
         {
-            Invoke-Exec -Executable "dotnet" -Arguments @("publish", "$($ProjectFileInfo.FullName)", "-c", "Release","-p:""Stage=publish""","-p:""PublishDir=$($PublishDirectory)""")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
+            Invoke-ProcessTyped -Executable "dotnet" -Arguments @("publish", "$($ProjectFileInfo.FullName)", "-c", "Release","-p:""Stage=publish""","-p:""PublishDir=$($PublishDirectory)""")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
         }
 
         if (-not($IsSDKProj)) {
@@ -325,7 +325,7 @@ foreach ($SolutionProjectPaths in $SolutionProjectPaths) {
             }
             Convert-TemplateFilePlaceholders -TemplateFile $DocFxTemplatePath -Replacements $DocFxReplacementsByToken
             Convert-TemplateFilePlaceholders -TemplateFile $IndexTemplatePath -Replacements $DocFxReplacementsByToken
-            Invoke-Exec -Executable "docfx" -Arguments @("$($DocFxConfigFileInfos.FullName)")  -CaptureOutput $false -CaptureOutputDump $true
+            Invoke-ProcessTyped -Executable "docfx" -Arguments @("$($DocFxConfigFileInfos.FullName)")  -CaptureOutput $false -CaptureOutputDump $true
         }
         
     }
@@ -410,7 +410,7 @@ if ($PushToLocalSource -eq $true)
     $NuGetPackageFileInfos = Find-FilesByPattern -Path "$PackRootPath" -Pattern "*.nupkg"
     foreach ($NuGetPackageFileInfo in $NuGetPackageFileInfos)
     {
-        Invoke-Exec -Executable "dotnet" -Arguments @("nuget", "push", "$($NuGetPackageFileInfo.FullName)", "--source","$LocalNuGetSourceName") -CaptureOutput $false
+        Invoke-ProcessTyped -Executable "dotnet" -Arguments @("nuget", "push", "$($NuGetPackageFileInfo.FullName)", "--source","$LocalNuGetSourceName")
     }
 }
 
@@ -419,7 +419,7 @@ if ($PushToGitHubSource -eq $true)
     $NuGetPackageFileInfos = Find-FilesByPattern -Path "$PackRootPath" -Pattern "*.nupkg"
     foreach ($NuGetPackageFileInfo in $NuGetPackageFileInfos)
     {
-        Invoke-Exec -Executable "dotnet" -Arguments @("nuget","push", "$($NuGetPackageFileInfo.FullName)", "--api-key", "$NUGET_GITHUB_PUSH","--source","$GitHubSourceName") -CaptureOutput $false -CaptureOutputDump $false -HideValues @($NUGET_GITHUB_PUSH)
+        Invoke-ProcessTyped -Executable "dotnet" -Arguments @("nuget","push", "$($NuGetPackageFileInfo.FullName)", "--api-key", "$NUGET_GITHUB_PUSH","--source","$GitHubSourceName") -HideValues @($NUGET_GITHUB_PUSH)
     }
     Unregister-LocalNuGetDotNetPackageSource -SourceName "$GitHubSourceName"
 }
@@ -429,7 +429,7 @@ if ($PushToNuGetTest -eq $true)
     $NuGetPackageFileInfos = Find-FilesByPattern -Path "$PackRootPath" -Pattern "*.nupkg"
     foreach ($NuGetPackageFileInfo in $NuGetPackageFileInfos)
     {
-        Invoke-Exec -Executable "dotnet" -Arguments @("nuget","push", "$($NuGetPackageFileInfo.FullName)", "--api-key", "$NUGET_TEST_PAT","--source","$NuGetTestSourceUri") -CaptureOutput $false -CaptureOutputDump $false -HideValues @($NUGET_TEST_PAT)
+        Invoke-ProcessTyped -Executable "dotnet" -Arguments @("nuget","push", "$($NuGetPackageFileInfo.FullName)", "--api-key", "$NUGET_TEST_PAT","--source","$NuGetTestSourceUri") -HideValues @($NUGET_TEST_PAT)
     }
 }
 
@@ -438,7 +438,7 @@ if ($PushToNuGetOrg -eq $true)
     $NuGetPackageFileInfos = Find-FilesByPattern -Path "$PackRootPath" -Pattern "*.nupkg"
     foreach ($NuGetPackageFileInfo in $NuGetPackageFileInfos)
     {
-        Invoke-Exec -Executable "dotnet" -Arguments @("nuget","push", "$($NuGetPackageFileInfo.FullName)", "--api-key", "$NUGET_PAT","--source","$NuGetOrgSourceUri") -CaptureOutput $false -CaptureOutputDump $false -HideValues @($NUGET_PAT)
+        Invoke-ProcessTyped -Executable "dotnet" -Arguments @("nuget","push", "$($NuGetPackageFileInfo.FullName)", "--api-key", "$NUGET_PAT","--source","$NuGetOrgSourceUri") -HideValues @($NUGET_PAT)
     }
 }
 
