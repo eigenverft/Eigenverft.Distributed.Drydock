@@ -8,7 +8,8 @@
 	<!-- General build settings: defines the output type and target frameworks -->
 	<PropertyGroup>
 		<OutputType>WinExe</OutputType>
-		<TargetFramework>net40</TargetFramework>
+		<TargetFramework>net90-windows</TargetFramework>
+		<TargetFrameworks>net90-windows</TargetFrameworks>
 		<SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
 		<CheckEolTargetFramework>false</CheckEolTargetFramework>
 		<InvariantGlobalization>true</InvariantGlobalization>
@@ -82,9 +83,6 @@
 	<!-- In pack add additional files to the package root directory of the nuget. -->
 	<ItemGroup Condition="'$(Stage)' == 'pack'">
 		<None Include="$(MSBuildProjectDirectory)\AddPackageFiles\**\*" Exclude="$(MSBuildProjectDirectory)\AddPackageFiles\ReleaseNotes.txt" Pack="true" PackagePath="" />
-	</ItemGroup>
-	<ItemGroup>
-	  <Reference Include="System.Windows.Forms" />
 	</ItemGroup>
 
 	<PropertyGroup Condition="'$(Stage)' == 'publish'">

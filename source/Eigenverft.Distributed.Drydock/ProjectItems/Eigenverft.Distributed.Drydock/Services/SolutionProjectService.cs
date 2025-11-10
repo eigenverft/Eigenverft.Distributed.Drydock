@@ -1,14 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
 using Eigenverft.Distributed.Drydock.CommandDeclaration;
 
 using Microsoft.Build.Construction;
-using Microsoft.Build.Evaluation;
 using Microsoft.Extensions.Logging;
 
 namespace Eigenverft.Distributed.Drydock.Services
@@ -35,6 +33,8 @@ namespace Eigenverft.Distributed.Drydock.Services
         /// <param name="cancellationToken">A token for monitoring cancellation requests.</param>
         /// <returns>The property value if found; otherwise, null.</returns>
         Task<string?> GetProjectProperty(string projectLocation, string? propertyName, CsProjCommand.ElementScope? scopeType, CancellationToken cancellationToken);
+
+        Task<string?> GetProjectInfo(string projectLocation, ProjTypeCommand.ReturnEnum? scopeType, CancellationToken cancellationToken);
     }
 
     /// <summary>
@@ -51,12 +51,9 @@ namespace Eigenverft.Distributed.Drydock.Services
 
         public async Task<List<string>> GetCsProjAbsolutPathsFromSolutions(string solutionLocation, CancellationToken cancellationToken)
         {
-
-
             List<string> retval = new List<string>();
             try
             {
-
                 List<ProjectInSolution> sln = SolutionFile.Parse(solutionLocation).ProjectsInOrder.Where(e => e.ProjectType == SolutionProjectType.KnownToBeMSBuildFormat).ToList();
                 List<ProjectRootElement> projects = new List<ProjectRootElement>();
 
@@ -66,7 +63,6 @@ namespace Eigenverft.Distributed.Drydock.Services
                     try
                     {
                         ProjectRootElement projectRoot = ProjectRootElement.Open(item.AbsolutePath);
-
 
                         var globalProperties = new Dictionary<string, string>
                         {
@@ -185,5 +181,59 @@ namespace Eigenverft.Distributed.Drydock.Services
                 return null;
             }
         }
+
+        /// <summary>
+        /// Retrieves project information based on the specified return type.
+        /// </summary>
+        /// <remarks>
+        /// Implementation reads the project file at the given path and returns metadata depending on the requested return type.
+        /// </remarks>
+        /// <param name="projectLocation">The full path to the project file.</param>
+        /// <param name="returnType">The requested type of project information.</param>
+        /// <param name="cancellationToken">Token to observe cancellation requests.</param>
+        /// <returns>
+        /// The requested project information as a string, or null if the input is invalid,
+        /// the project file cannot be opened, or the requested information is not available.
+        /// </returns>
+        /// <example>
+        /// var info = await GetProjectInfo("path/to/project.csproj", ProjTypeCommand.ReturnEnum.sdk, CancellationToken.None);
+        /// </example>
+        public async Task<string?> GetProjectInfo(string projectLocation, ProjTypeCommand.ReturnEnum? returnType, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrEmpty(projectLocation))
+            {
+                _logger.LogWarning("No project location was specified.");
+                return null;
+            }
+
+            ProjectRootElement projectRoot;
+            try
+            {
+                projectRoot = ProjectRootElement.Open(projectLocation);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to open project file: {ProjectLocation}", projectLocation);
+                return null;
+            }
+
+            switch (returnType)
+            {
+                case ProjTypeCommand.ReturnEnum.sdk:
+                    if (string.IsNullOrWhiteSpace(projectRoot.Sdk))
+                    {
+                        return "false";
+                    }
+                    else
+                    {
+                        return "true";
+                    }
+
+                default:
+                    _logger.LogWarning("Requested return type '{ReturnType}' is not supported for project: {ProjectLocation}", returnType, projectLocation);
+                    return null;
+            }
+        }
+
     }
 }

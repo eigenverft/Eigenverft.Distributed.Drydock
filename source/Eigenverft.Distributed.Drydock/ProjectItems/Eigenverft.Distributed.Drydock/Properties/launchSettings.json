@@ -2,7 +2,7 @@
   "profiles": {
     "Eigenverft.Distributed.Drydock": {
       "commandName": "Project",
-      "commandLineArgs": "csproj --location C:\\dev\\github.com\\eigenverft\\Eigenverft.Distributed.Drydock\\source\\Eigenverft.Distributed.Drydock\\ProjectItems\\ClassLibrary1\\ClassLibrary1.csproj --property TargetFrameworks"
+      "commandLineArgs": "projtype --location \"C:\\dev\\github.com\\eigenverft\\Eigenverft.Distributed.Drydock\\source\\MyForms\\ProjectItems\\WindowsFormsAppNonSDK\\WindowsFormsAppNonSDK.csproj\""
     }
   }
 }

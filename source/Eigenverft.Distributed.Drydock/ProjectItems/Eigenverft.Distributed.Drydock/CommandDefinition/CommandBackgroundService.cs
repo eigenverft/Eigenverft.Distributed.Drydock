@@ -40,10 +40,12 @@ namespace Eigenverft.Distributed.Drydock.CommandDefinition
             //ReadCommand.Command.SetAction(ReadCommandAsync);
             CsProjCommand.Command.SetAction(CsProjCommandAsync);
             SlnCommand.Command.SetAction(SlnCommandAsync);
+            ProjTypeCommand.Command.SetAction(ProjTypeCommandAsync);
 
             //rootCommand.Subcommands.Add(ReadCommand.Command);
             rootCommand.Subcommands.Add(CsProjCommand.Command);
             rootCommand.Subcommands.Add(SlnCommand.Command);
+            rootCommand.Subcommands.Add(ProjTypeCommand.Command);
 
         }
 

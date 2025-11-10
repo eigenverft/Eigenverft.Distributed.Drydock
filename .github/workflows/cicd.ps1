@@ -191,76 +191,63 @@ foreach ($SolutionProjectPaths in $SolutionProjectPaths) {
             "-p:UseSharedCompilation=false"
         )
 
+        #WRONG TODODODODODODODODO on class lib
         Invoke-ProcessTyped -Executable "drydock.exe" -Arguments @("csproj", "--location", "$($ProjectFileInfo.FullName)", "--property", "TargetFrameworkVersion") -ReturnType Objects -AllowedExitCodes @(0,-1) -CaptureOutput $false -CaptureOutputDump $true
-        
-        $UseVSMsbuild = $false
-        $UseDotNetBuild = $false
+
         $IsSDKProj = $false
+        $IsNoneSDKProj = $false
+        $IsSDKWithFramework = $false
+
+        if ($LASTEXITCODE -eq -1) {
+            $IsSDKProj = $true
+        } else {
+            $IsNoneSDKProj = $true 
+        }
 
         # TargetFrameworkVersion not found assume sdk project style and get TargetFramework
-        if ($LASTEXITCODE -eq -1) {
-            
+        if ($IsSDKProj) {
             $TargetFramework = Invoke-ProcessTyped -Executable "drydock.exe" -Arguments @("csproj", "--location", "$($ProjectFileInfo.FullName)", "--property", "TargetFramework") -ReturnType Objects -AllowedExitCodes @(0,-1)
             if ($LASTEXITCODE -eq -1)
             {
                 $TargetFrameworks = Invoke-ProcessTyped -Executable "drydock.exe" -Arguments @("csproj", "--location", "$($ProjectFileInfo.FullName)", "--property", "TargetFrameworks") -ReturnType Objects -AllowedExitCodes @(0)
                 $TargetFrameworks = $TargetFrameworks.Split(';')
-                $IsDotNetFramework = $false
                 foreach ($TargetFrame in $TargetFrameworks)
                 {
                     if ($TargetFrame.Trim().ToLowerInvariant() -in @('net20', 'net35', 'net40', 'net403', 'net45', 'net451', 'net452', 'net46', 'net461', 'net462', 'net47', 'net471', 'net472', 'net48', 'net481'))
                     {
-                        $IsDotNetFramework = $true
+                        $IsSDKWithFramework = $true
                         break;
                     }
                 }
-                if ($IsDotNetFramework)
-                {
-                    $UseVSMsbuild = $true
-                    $UseDotNetBuild = $false
-                }
-                else {
-                    $UseVSMsbuild = $false
-                    $UseDotNetBuild = $true
-                }
             } elseif ($LASTEXITCODE -eq 0) {
-                $IsSDKProj = $true
                 if ($TargetFramework -in @('net20', 'net35', 'net40', 'net403', 'net45', 'net451', 'net452', 'net46', 'net461', 'net462', 'net47', 'net471', 'net472', 'net48', 'net481'))
                 {
-                    $UseVSMsbuild = $true
-                    $UseDotNetBuild = $false
-                }
-                else {
-                    $UseVSMsbuild = $false
-                    $UseDotNetBuild = $true
+                   $IsSDKWithFramework = $true
                 }
             }
-        } elseif ($LASTEXITCODE -eq 0){
-            $UseVSMsbuild = $true
-            $UseDotNetBuild = $false
-            $IsSDKProj = $false
         }
 
         # Sequence for framework and dotnet core projects , restore,clean,restore needed for proper incremental build
         Invoke-ProcessTyped -Executable "dotnet" -Arguments @("restore", "$($ProjectFileInfo.FullName)", "-p:Stage=restore") -ReturnType Objects -CommonArguments $DotnetCommonParameters
         Invoke-ProcessTyped -Executable "dotnet" -Arguments @("clean", "$($ProjectFileInfo.FullName)", "-p:Stage=clean") -ReturnType Objects -CommonArguments $DotnetCommonParameters 
         Invoke-ProcessTyped -Executable "dotnet" -Arguments @("restore", "$($ProjectFileInfo.FullName)", "-p:Stage=restore") -ReturnType Objects -CommonArguments $DotnetCommonParameters 
-        
-        if ($UseVSMsbuild)
+
+        if ($IsNoneSDKProj)
         {
-            if ($IsSDKProj)
+            Invoke-ProcessTyped -Executable "$MsBuildVs" -Arguments @("$($ProjectFileInfo.FullName)", "-p:Stage=build") -CommonArguments $NonSDKParameters -ReturnType Objects -CaptureOutput $true -CaptureOutputDump $false            
+        }
+
+        if ($IsSDKProj)
+        {
+            if ($IsSDKWithFramework)
             {
-                Invoke-ProcessTyped -Executable "$MsBuildVs" -Arguments @("$($ProjectFileInfo.FullName)", "-p:Stage=build")  -CommonArguments $DotnetCommonParameters -ReturnType Objects -CaptureOutput $true -CaptureOutputDump $false
+                Invoke-ProcessTyped -Executable "$MsBuildVs" -Arguments @("/t:Build","$($ProjectFileInfo.FullName)", "-p:Stage=build")  -CommonArguments $DotnetCommonParameters -ReturnType Objects -CaptureOutput $true -CaptureOutputDump $false
             }
             else {
-                Invoke-ProcessTyped -Executable "$MsBuildVs" -Arguments @("$($ProjectFileInfo.FullName)", "-p:Stage=build") -CommonArguments $NonSDKParameters -ReturnType Objects -CaptureOutput $true -CaptureOutputDump $false
+                Invoke-ProcessTyped -Executable "dotnet" -Arguments @("build","$($ProjectFileInfo.FullName)", "-p:Stage=build")  -CommonArguments $DotnetCommonParameters -ReturnType Objects -CaptureOutput $true -CaptureOutputDump $false
             }
         }
 
-        if ($UseDotNetBuild)
-        {
-            Invoke-ProcessTyped -Executable "dotnet" -Arguments @("build","$($ProjectFileInfo.FullName)", "-p:Stage=build")  -CommonArguments $DotnetCommonParameters -ReturnType Objects -CaptureOutput $true -CaptureOutputDump $false
-        }
 
         $IsTestProject = $false
         $IsPackable = $false
@@ -312,7 +299,7 @@ foreach ($SolutionProjectPaths in $SolutionProjectPaths) {
             Invoke-ProcessTyped -Executable "dotnet" -Arguments @("publish", "$($ProjectFileInfo.FullName)", "-c", "Release","-p:""Stage=publish""","-p:""PublishDir=$($PublishDirectory)""")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
         }
 
-        if (-not($IsSDKProj)) {
+        if ($IsNoneSDKProj) {
             Copy-FilesRecursively -SourceDirectory "$($BuildBinDirectory)" -DestinationDirectory "$($PublishDirectory)" -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
         }
          
@@ -439,6 +426,13 @@ if ($PushToNuGetOrg -eq $true)
     foreach ($NuGetPackageFileInfo in $NuGetPackageFileInfos)
     {
         Invoke-ProcessTyped -Executable "dotnet" -Arguments @("nuget","push", "$($NuGetPackageFileInfo.FullName)", "--api-key", "$NUGET_PAT","--source","$NuGetOrgSourceUri") -HideValues @($NUGET_PAT)
+    }
+}
+
+foreach ($SolutionProjectPaths in $SolutionProjectPaths) {
+    foreach ($ProjectFileInfo in $SolutionProjectPaths.Prj) {
+        $SolutionFileInfo = $SolutionProjectPaths.Sln
+    
     }
 }
 
