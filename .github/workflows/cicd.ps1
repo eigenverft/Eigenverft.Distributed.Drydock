@@ -143,7 +143,7 @@ foreach ($solutionFile in $SolutionFileInfos) {
 }
 
 $Vswhere = Find-FilesByPattern -Path "${env:ProgramFiles(x86)}\Microsoft Visual Studio" -Pattern "vswhere.exe"
-$MsBuildVs = Invoke-ProcessTyped -Executable "$Vswhere" -Arguments @("-latest", "-products","*", "-requires","Microsoft.Component.MSBuild", "-find", "**\Bin\MSBuild.exe") -ReturnType Objects
+$MsBuildVs = Invoke-ProcessTyped -Executable "$($Vswhere.FullName)" -Arguments @("-latest", "-products","*", "-requires","Microsoft.Component.MSBuild", "-find", "**\Bin\MSBuild.exe") -ReturnType Objects
 
 # Build, Test, Pack, Publish, and Generate Reports for each project in the solution.
 foreach ($SolutionProjectPaths in $SolutionProjectPaths) {
