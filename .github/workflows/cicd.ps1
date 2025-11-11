@@ -81,6 +81,7 @@ $BranchDeploymentConfig = Convert-BranchToDeploymentInfo -BranchName "$GitCurren
 
 # Generates a version based on the current date time to verify the version functions work as expected
 $GeneratedVersion = Convert-DateTimeTo64SecVersionComponents -VersionBuild 0 -VersionMajor 1
+#$GeneratedVersion.VersionFull = "0.1.20256.30636"
 $GeneratedVersionAsDateTime = Convert-64SecVersionComponentsToDateTime -VersionBuild $GeneratedVersion.VersionBuild -VersionMajor $GeneratedVersion.VersionMajor -VersionMinor $GeneratedVersion.VersionMinor -VersionRevision $GeneratedVersion.VersionRevision
 Test-VariableValue -Variable { $GeneratedVersion } -ExitIfNullOrEmpty
 Test-VariableValue -Variable { $GeneratedVersionAsDateTime } -ExitIfNullOrEmpty
@@ -118,6 +119,8 @@ Enable-TempDotnetTools -ManifestFile "$DotNetToolsManifestPath" -NoReturn
 # Required output root folder
 $OutputRootPath = Get-Path -Paths @("$GitRepositoryRoot","output")
 New-Directory -Paths @($OutputRootPath)
+
+# Delete clean the outputfolder
 if (-not $($RunEnvironment.IsCI)) { Remove-FilesByPattern -Path "$OutputRootPath" -Pattern "*"  }
 
 $BranchVersionRelativePath = Get-Path -Paths @($BranchDeploymentConfig.Branch.PathSegmentsSanitized,$GeneratedVersion.VersionFull)
@@ -130,6 +133,8 @@ $BuildBinPath = Get-Path -Paths @("$BuildRootPath","bin")
 $BuildObjPath = Get-Path -Paths @("$BuildRootPath","obj")
 $PackRootPath = Get-Path -Paths @("$OutputRootPath","pack")
 $PublishRootPath = Get-Path -Paths @("$OutputRootPath","publish")
+$SlnPublishRootPath = Get-Path -Paths @("$OutputRootPath","slnpublish")
+$ProjPublishRootPath = Get-Path -Paths @("$OutputRootPath","projpublish")
 $ReportsRootPath =  Get-Path -Paths @("$OutputRootPath","reports")
 $DocsRootPath = Get-Path -Paths @("$OutputRootPath","docs")
 
@@ -146,9 +151,9 @@ $Vswhere = Find-FilesByPattern -Path "${env:ProgramFiles(x86)}\Microsoft Visual 
 $MsBuildVs = Invoke-ProcessTyped -Executable "$($Vswhere.FullName)" -Arguments @("-latest", "-products","*", "-requires","Microsoft.Component.MSBuild", "-find", "**\Bin\MSBuild.exe") -ReturnType Objects
 
 # Build, Test, Pack, Publish, and Generate Reports for each project in the solution.
-foreach ($SolutionProjectPaths in $SolutionProjectPaths) {
-    foreach ($ProjectFileInfo in $SolutionProjectPaths.Prj) {
-        $SolutionFileInfo = $SolutionProjectPaths.Sln
+foreach ($SolutionProjectPath in $SolutionProjectPaths) {
+    foreach ($ProjectFileInfo in $SolutionProjectPath.Prj) {
+        $SolutionFileInfo = $SolutionProjectPath.Sln
 
         # Create required output directories
         New-Directory -Paths @($BuildRootPath)
@@ -330,8 +335,11 @@ foreach ($SolutionProjectPaths in $SolutionProjectPaths) {
 # Resolving deployment information for the current branch
 $DeploymentChannel = $BranchDeploymentConfig.Channel.Value
 
+$Drop = "C:\temp\$GitRepositoryName-drops"
+$RepositoryDropRootPath = "$Drop\rep"
+$SolutionsDropRootPath = "$Drop\sln"
+$ProjectsDropRootPath = "$Drop\prj"
 
-$BinaryDropRootPath = "C:\temp\$GitRepositoryName-drops"
 
 $PushToLocalSource = $false
 $PushToGitHubSource = $false
@@ -351,7 +359,7 @@ if ($DeploymentChannel -in @("development"))
     $PushToNuGetOrg = $false
 
     $CopyToChannelDrops = $true
-    $CopyToDistributionDrop = $false
+    $CopyToDistributionDrop = $true
     $CopyToZipDrop = $true
 }
 
@@ -429,10 +437,64 @@ if ($PushToNuGetOrg -eq $true)
     }
 }
 
-foreach ($SolutionProjectPaths in $SolutionProjectPaths) {
-    foreach ($ProjectFileInfo in $SolutionProjectPaths.Prj) {
-        $SolutionFileInfo = $SolutionProjectPaths.Sln
+# additional publish copys
+foreach ($SolutionProjectPath in $SolutionProjectPaths) {
+    foreach ($ProjectFileInfo in $SolutionProjectPath.Prj) {
+        $SolutionFileInfo = $SolutionProjectPath.Sln
+            New-Directory -Paths @($BuildRootPath)
+            $PublishDirectory = New-Directory -Paths @($PublishRootPath,$SolutionFileInfo.BaseName,$ProjectFileInfo.BaseName,$ChannelVersionRelativePath)
+            $ReportsDirectory = New-Directory -Paths @($ReportsRootPath,$SolutionFileInfo.BaseName,$ProjectFileInfo.BaseName,$ChannelVersionRelativePath)
+            $DocsDirectory = New-Directory -Paths @($DocsRootPath,$SolutionFileInfo.BaseName,$ProjectFileInfo.BaseName,$ChannelVersionRelativePath)
+
+            Copy-FilesRecursively -SourceDirectory "$ReportsDirectory" -DestinationDirectory "$PublishDirectory\THIRDPARTY-LICENSE-NOTICE" -Filter "*.ThirdPartyLicencesNotices.txt" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $false
+            Copy-FilesRecursively -SourceDirectory "$ReportsDirectory" -DestinationDirectory "$PublishDirectory\BOM-HEALTH-REPORT" -Filter "*.Inventory-Health-Report.txt" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $false
+            
+            if (Test-Path -Path "$DocsDirectory\docfx" -PathType Container)
+            {
+                Copy-FilesRecursively -SourceDirectory "$DocsDirectory\docfx" -DestinationDirectory "$PublishDirectory\DOCFX\$($ProjectFileInfo.BaseName)" -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $false
+            }
+     }
+}
+
+#solution based files stashing of files.
+foreach ($SolutionProjectPath in $SolutionProjectPaths) {
+    $SolutionFileInfo = $SolutionProjectPath.Sln
+    $SolutionPublishDirectory = New-Directory -Paths @($SlnPublishRootPath,$SolutionFileInfo.BaseName,$ChannelVersionRelativePath)
+    Remove-FilesByPattern -Path "$SolutionPublishDirectory" -Pattern "*"
     
+    foreach ($ProjectFileInfo in $SolutionProjectPath.Prj) {
+            $PublishDirectory = New-Directory -Paths @($PublishRootPath,$SolutionFileInfo.BaseName,$ProjectFileInfo.BaseName,$ChannelVersionRelativePath)
+            Copy-FilesRecursively -SourceDirectory "$PublishDirectory" -DestinationDirectory "$SolutionPublishDirectory" -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $false
+    }
+
+    Copy-FilesRecursively -SourceDirectory "$SolutionPublishDirectory" -DestinationDirectory (Get-Path -Paths @($SolutionsDropRootPath,$SolutionFileInfo.BaseName,$ChannelVersionRelativePath)) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
+    Copy-FilesRecursively -SourceDirectory "$SolutionPublishDirectory" -DestinationDirectory (Get-Path -Paths @($SolutionsDropRootPath,$SolutionFileInfo.BaseName,$ChannelLatestRelativePath)) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
+    Copy-FilesRecursively -SourceDirectory "$SolutionPublishDirectory" -DestinationDirectory (Get-Path -Paths @($SolutionsDropRootPath,$SolutionFileInfo.BaseName,"distributed")) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
+
+    $nugetFilePart1 = Join-Text -InputObject @("$($SolutionFileInfo.BaseName)","$($GeneratedVersion.VersionFull)") -Separator '.' -Normalization Trim
+    $nugetFileEmulation = Join-Text -InputObject @("$nugetFilePart1","$($BranchDeploymentConfig.Affix.Label)") -Separator '-' -Normalization Trim
+    Compress-Directory -SourceDirectory "$SolutionPublishDirectory" -DestinationFile "$(Get-Path -Paths @($SolutionsDropRootPath,$SolutionFileInfo.BaseName,"zipped","$nugetFileEmulation.zip"))"
+    # Compress-Directory -SourceDirectory "$SolutionPublishDirectory" -DestinationFile "$(Get-Path -Paths @($SolutionsDropRootPath,"zipped","$nugetFileEmulation.zip"))"
+}
+
+# project based files stashing of files.
+foreach ($SolutionProjectPath in $SolutionProjectPaths) {
+    $SolutionFileInfo = $SolutionProjectPath.Sln
+    foreach ($ProjectFileInfo in $SolutionProjectPath.Prj) {
+
+            $PublishDirectory = New-Directory -Paths @($PublishRootPath,$SolutionFileInfo.BaseName,$ProjectFileInfo.BaseName,$ChannelVersionRelativePath)
+            
+            $ProjPublishDirectory = New-Directory -Paths @($ProjPublishRootPath,$ProjectFileInfo.BaseName,$ChannelVersionRelativePath)
+        
+            Copy-FilesRecursively -SourceDirectory "$PublishDirectory" -DestinationDirectory "$ProjPublishDirectory" -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $false
+
+            Copy-FilesRecursively -SourceDirectory "$ProjPublishDirectory" -DestinationDirectory (Get-Path -Paths @($ProjectsDropRootPath,$ProjectFileInfo.BaseName,$ChannelVersionRelativePath)) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
+            Copy-FilesRecursively -SourceDirectory "$ProjPublishDirectory" -DestinationDirectory (Get-Path -Paths @($ProjectsDropRootPath,$ProjectFileInfo.BaseName,$ChannelLatestRelativePath)) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
+            Copy-FilesRecursively -SourceDirectory "$ProjPublishDirectory" -DestinationDirectory (Get-Path -Paths @($ProjectsDropRootPath,$ProjectFileInfo.BaseName,"distributed")) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
+
+            $nugetFilePart1 = Join-Text -InputObject @("$($ProjectFileInfo.BaseName)","$($GeneratedVersion.VersionFull)") -Separator '.' -Normalization Trim
+            $nugetFileEmulation = Join-Text -InputObject @("$nugetFilePart1","$($BranchDeploymentConfig.Affix.Label)") -Separator '-' -Normalization Trim
+            Compress-Directory -SourceDirectory "$ProjPublishDirectory" -DestinationFile "$(Get-Path -Paths @($ProjectsDropRootPath,$ProjectFileInfo.BaseName,"zipped","$nugetFileEmulation.zip"))"
     }
 }
 
@@ -440,18 +502,18 @@ exit
 
 if ($CopyToChannelDrops -eq $true)
 {   
-    Copy-FilesRecursively -SourceDirectory "$PublishDirectory" -DestinationDirectory (Get-Path -Paths @($BinaryDropRootPath,"$ChannelVersionRelativePath")) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $false
-    Copy-FilesRecursively -SourceDirectory "$PublishDirectory" -DestinationDirectory (Get-Path -Paths @($BinaryDropRootPath,"$ChannelLatestRelativePath")) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
+    Copy-FilesRecursively -SourceDirectory "$PublishDirectory" -DestinationDirectory (Get-Path -Paths @($RepositoryDropRootPath,"$ChannelVersionRelativePath")) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $false
+    Copy-FilesRecursively -SourceDirectory "$PublishDirectory" -DestinationDirectory (Get-Path -Paths @($RepositoryDropRootPath,"$ChannelLatestRelativePath")) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
 }
 
 if ($CopyToDistributionDrop -eq $true)
 {   
-    Copy-FilesRecursively -SourceDirectory "$PublishDirectory" -DestinationDirectory (Get-Path -Paths @($BinaryDropRootPath,"distributed")) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
+    Copy-FilesRecursively -SourceDirectory "$PublishDirectory" -DestinationDirectory (Get-Path -Paths @($RepositoryDropRootPath,"distributed")) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
 }
 
 if ($CopyToZipDrop -eq $true)
 {
     $nugetFilePart1 = Join-Text -InputObject @("$GitRepositoryName","$($GeneratedVersion.VersionFull)") -Separator '.' -Normalization Trim
     $nugetFileEmulation = Join-Text -InputObject @("$nugetFilePart1","$($BranchDeploymentConfig.Affix.Label)") -Separator '-' -Normalization Trim
-    Compress-Directory -SourceDirectory "$PublishDirectory" -DestinationFile "$(Get-Path -Paths @($BinaryDropRootPath,"zipped","$nugetFileEmulation.zip"))"
+    Compress-Directory -SourceDirectory "$PublishDirectory" -DestinationFile "$(Get-Path -Paths @($RepositoryDropRootPath,"zipped","$nugetFileEmulation.zip"))"
 }
