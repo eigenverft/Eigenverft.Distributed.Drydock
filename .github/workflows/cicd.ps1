@@ -31,8 +31,9 @@ $RemoteResourcesAvailable = Test-RemoteResourcesAvailable -Quiet
 # Ensure connectivity to PowerShell Gallery before attempting module installation, if not assuming being offline, installation is present check existance with Test-ModuleAvailable
 if ($RemoteResourcesAvailable)
 {
+    Update-ModuleIfNeeded -ModuleName 'Eigenverft.Manifested.Drydock'
+    #Install-Module -Name 'Eigenverft.Manifested.Drydock' -Repository "PSGallery" -Scope CurrentUser -Force -AllowClobber -AllowPrerelease -ErrorAction Stop
     # Install the required modules to run this script, Eigenverft.Manifested.Drydock needs to be Powershell 5.1 and Powershell 7+ compatible
-    Install-Module -Name 'Eigenverft.Manifested.Drydock' -Repository "PSGallery" -Scope CurrentUser -Force -AllowClobber -AllowPrerelease -ErrorAction Stop
 }
 
 Test-ModuleAvailable -Name 'Eigenverft.Manifested.Drydock' -IncludePrerelease -ExitIfNotFound -Quiet
@@ -102,7 +103,6 @@ $NuGetAllowedLicensesPath = Get-Path -Paths @("$ConfigRootPath","nuget-license",
 $NuGetLicenseMappingsPath = Get-Path -Paths @("$ConfigRootPath","nuget-license","licenses-mapping.json")
 $DocFxTemplatePath = Get-Path -Paths @("$ConfigRootPath","docfx","build","docfx_local.template.json")
 $IndexTemplatePath = Get-Path -Paths @("$ConfigRootPath","docfx","build","index.template.md")
-$DocFxConfigFileInfos = Find-FilesByPattern -Path (Get-Path -Paths @("$ConfigRootPath","docfx")) -Pattern "docfx_local.json"
 
 # Enable github specific nuget sources.
 $GitHubPackagesUser = "eigenverft"
@@ -131,6 +131,7 @@ $ChannelLatestRelativePath = Get-Path -Paths @($BranchDeploymentConfig.Channel.V
 $BuildRootPath = Get-Path -Paths @("$OutputRootPath","build")
 $BuildBinPath = Get-Path -Paths @("$BuildRootPath","bin")
 $BuildObjPath = Get-Path -Paths @("$BuildRootPath","obj")
+
 $PackRootPath = Get-Path -Paths @("$OutputRootPath","pack")
 $PublishRootPath = Get-Path -Paths @("$OutputRootPath","publish")
 $SlnPublishRootPath = Get-Path -Paths @("$OutputRootPath","slnpublish")
@@ -315,8 +316,8 @@ foreach ($SolutionProjectPath in $SolutionProjectPaths) {
                 "outputDirectory"     = (Get-Path -Paths @("$DocsDirectory","docfx")).Replace('\','/')
                 "appName"     = "$($ProjectFileInfo.BaseName)"
             }
-            Convert-TemplateFilePlaceholders -TemplateFile $DocFxTemplatePath -Replacements $DocFxReplacementsByToken
-            Convert-TemplateFilePlaceholders -TemplateFile $IndexTemplatePath -Replacements $DocFxReplacementsByToken
+            $DocFxConfigFileInfos = Convert-TemplateFilePlaceholders -TemplateFile $DocFxTemplatePath -Replacements $DocFxReplacementsByToken
+            $null = Convert-TemplateFilePlaceholders -TemplateFile $IndexTemplatePath -Replacements $DocFxReplacementsByToken
             Invoke-ProcessTyped -Executable "docfx" -Arguments @("$($DocFxConfigFileInfos.FullName)")  -CaptureOutput $false -CaptureOutputDump $true
         }
         
@@ -340,15 +341,10 @@ $RepositoryDropRootPath = "$Drop\rep"
 $SolutionsDropRootPath = "$Drop\sln"
 $ProjectsDropRootPath = "$Drop\prj"
 
-
 $PushToLocalSource = $false
 $PushToGitHubSource = $false
 $PushToNuGetTest = $false
 $PushToNuGetOrg = $false
-
-$CopyToChannelDrops = $false
-$CopyToDistributionDrop = $false
-$CopyToZipDrop = $false
 
 # Determine where to publish based on the deployment channel
 if ($DeploymentChannel -in @("development"))
@@ -357,10 +353,6 @@ if ($DeploymentChannel -in @("development"))
     $PushToGitHubSource = $false
     $PushToNuGetTest = $false
     $PushToNuGetOrg = $false
-
-    $CopyToChannelDrops = $true
-    $CopyToDistributionDrop = $true
-    $CopyToZipDrop = $true
 }
 
 if ($DeploymentChannel -in @('quality'))
@@ -369,10 +361,6 @@ if ($DeploymentChannel -in @('quality'))
     $PushToGitHubSource = $true
     $PushToNuGetTest = $true
     $PushToNuGetOrg = $false
-
-    $CopyToChannelDrops = $true
-    $CopyToDistributionDrop = $false
-    $CopyToZipDrop = $true
 }
 
 if ($DeploymentChannel -in @('staging'))
@@ -381,10 +369,6 @@ if ($DeploymentChannel -in @('staging'))
     $PushToGitHubSource = $true
     $PushToNuGetTest = $true
     $PushToNuGetOrg = $false
-
-    $CopyToChannelDrops = $true
-    $CopyToDistributionDrop = $false
-    $CopyToZipDrop = $true
 }
 
 if ($DeploymentChannel -in @('production'))
@@ -393,10 +377,6 @@ if ($DeploymentChannel -in @('production'))
     $PushToGitHubSource = $true
     $PushToNuGetTest = $false
     $PushToNuGetOrg = $true
-
-    $CopyToChannelDrops = $true
-    $CopyToDistributionDrop = $true
-    $CopyToZipDrop = $true
 }
 
 # Deploy *.nupkg artifacts to the appropriate destinations
