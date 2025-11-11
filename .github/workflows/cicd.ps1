@@ -36,7 +36,7 @@ if ($RemoteResourcesAvailable)
     # Install the required modules to run this script, Eigenverft.Manifested.Drydock needs to be Powershell 5.1 and Powershell 7+ compatible
 }
 
-Test-ModuleAvailable -Name 'Eigenverft.Manifested.Drydock' -IncludePrerelease -ExitIfNotFound -Quiet
+$null = Test-ModuleAvailable -Name 'Eigenverft.Manifested.Drydock' -IncludePrerelease -ExitIfNotFound -Quiet
 
 # Required for updating PowerShellGet and PackageManagement providers in local PowerShell 5.x environments
 Initialize-PowerShellMiniBootstrap
@@ -58,8 +58,8 @@ Test-VariableValue -Variable { $NUGET_TEST_PAT } -ExitIfNullOrEmpty -HideValue
 Test-VariableValue -Variable { $PsGalleryApiKey } -ExitIfNullOrEmpty -HideValue
 
 # Verify required commands are available
-if ($GitCliInfo = Test-CommandAvailable -Command "git") { Write-Host "Test-CommandAvailable: $($GitCliInfo.Name) $($GitCliInfo.Version) found at $($GitCliInfo.Source)" } else { Write-Error "git not found"; exit 1 }
-if ($DotNetCliInfo = Test-CommandAvailable -Command "dotnet") { Write-Host "Test-CommandAvailable: $($DotNetCliInfo.Name) $($DotNetCliInfo.Version) found at $($DotNetCliInfo.Source)" } else { Write-Error "dotnet not found"; exit 1 }
+$null = Test-CommandAvailable -Command "dotnet" -ExitIfNotFound
+$null = Test-CommandAvailable -Command "git" -ExitIfNotFound
 
 # Preload environment information
 $RunEnvironment = Get-RunEnvironment
