@@ -498,22 +498,3 @@ foreach ($SolutionProjectPath in $SolutionProjectPaths) {
     }
 }
 
-exit
-
-if ($CopyToChannelDrops -eq $true)
-{   
-    Copy-FilesRecursively -SourceDirectory "$PublishDirectory" -DestinationDirectory (Get-Path -Paths @($RepositoryDropRootPath,"$ChannelVersionRelativePath")) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $false
-    Copy-FilesRecursively -SourceDirectory "$PublishDirectory" -DestinationDirectory (Get-Path -Paths @($RepositoryDropRootPath,"$ChannelLatestRelativePath")) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
-}
-
-if ($CopyToDistributionDrop -eq $true)
-{   
-    Copy-FilesRecursively -SourceDirectory "$PublishDirectory" -DestinationDirectory (Get-Path -Paths @($RepositoryDropRootPath,"distributed")) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
-}
-
-if ($CopyToZipDrop -eq $true)
-{
-    $nugetFilePart1 = Join-Text -InputObject @("$GitRepositoryName","$($GeneratedVersion.VersionFull)") -Separator '.' -Normalization Trim
-    $nugetFileEmulation = Join-Text -InputObject @("$nugetFilePart1","$($BranchDeploymentConfig.Affix.Label)") -Separator '-' -Normalization Trim
-    Compress-Directory -SourceDirectory "$PublishDirectory" -DestinationFile "$(Get-Path -Paths @($RepositoryDropRootPath,"zipped","$nugetFileEmulation.zip"))"
-}
