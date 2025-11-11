@@ -134,6 +134,7 @@ $BuildObjPath = Get-Path -Paths @("$BuildRootPath","obj")
 
 $PackRootPath = Get-Path -Paths @("$OutputRootPath","pack")
 $PublishRootPath = Get-Path -Paths @("$OutputRootPath","publish")
+$RepoPublishRootPath = Get-Path -Paths @("$OutputRootPath","repopublish")
 $SlnPublishRootPath = Get-Path -Paths @("$OutputRootPath","slnpublish")
 $ProjPublishRootPath = Get-Path -Paths @("$OutputRootPath","projpublish")
 $ReportsRootPath =  Get-Path -Paths @("$OutputRootPath","reports")
@@ -435,6 +436,23 @@ foreach ($SolutionProjectPath in $SolutionProjectPaths) {
             }
      }
 }
+
+# repository based files stashing of files.
+$RepoPublishDirectory = New-Directory -Paths @($RepoPublishRootPath,$ChannelVersionRelativePath)
+foreach ($SolutionProjectPath in $SolutionProjectPaths) {
+    $SolutionFileInfo = $SolutionProjectPath.Sln
+    foreach ($ProjectFileInfo in $SolutionProjectPath.Prj) {
+            $PublishDirectory = New-Directory -Paths @($PublishRootPath,$SolutionFileInfo.BaseName,$ProjectFileInfo.BaseName,$ChannelVersionRelativePath)
+            Copy-FilesRecursively -SourceDirectory "$PublishDirectory" -DestinationDirectory "$RepoPublishDirectory" -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $false
+    }
+}
+Copy-FilesRecursively -SourceDirectory "$RepoPublishDirectory" -DestinationDirectory (Get-Path -Paths @($RepositoryDropRootPath,$GitRepositoryName,$ChannelVersionRelativePath)) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
+Copy-FilesRecursively -SourceDirectory "$RepoPublishDirectory" -DestinationDirectory (Get-Path -Paths @($RepositoryDropRootPath,$GitRepositoryName,$ChannelLatestRelativePath)) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
+Copy-FilesRecursively -SourceDirectory "$RepoPublishDirectory" -DestinationDirectory (Get-Path -Paths @($RepositoryDropRootPath,$GitRepositoryName,"distributed")) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
+$nugetFilePart1 = Join-Text -InputObject @("$($GitRepositoryName)","$($GeneratedVersion.VersionFull)") -Separator '.' -Normalization Trim
+$nugetFileEmulation = Join-Text -InputObject @("$nugetFilePart1","$($BranchDeploymentConfig.Affix.Label)") -Separator '-' -Normalization Trim
+Compress-Directory -SourceDirectory "$RepoPublishDirectory" -DestinationFile "$(Get-Path -Paths @($RepositoryDropRootPath,$GitRepositoryName,"zipped","$nugetFileEmulation.zip"))"
+
 
 #solution based files stashing of files.
 foreach ($SolutionProjectPath in $SolutionProjectPaths) {
