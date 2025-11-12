@@ -12,7 +12,7 @@ param (
 # - In catch{ }, prefer Write-Error or 'throw' to preserve fail-fast behavior.
 #   * Write-Error (with ErrorActionPreference='Stop') is terminating and bubbles to the caller 'throw' is always terminating and keeps stack context.
 # - Using Write-Host in catch{ } only logs and SWALLOWS the exception; execution continues, use a sentinel value (e.g., $null) explicitly.
-# - Note: native tool exit codes on PS5 aren’t governed by ErrorActionPreference; use the Invoke-Exec wrapper to enforce policy.
+# - Note: native tool exit codes on PS5 aren’t governed by ErrorActionPreference; use the Invoke-Exec or Invoke-ProcessTyped wrapper to enforce policy.
 Set-StrictMode -Version 3
 $ErrorActionPreference     = 'Stop'   # errors become terminating
 $Global:ConsoleLogMinLevel = 'INF'    # gate: TRC/DBG/INF/WRN/ERR/FTL
@@ -98,6 +98,7 @@ $LocalNuGetSourceName = Register-LocalNuGetDotNetPackageSource -SourceName "$Loc
 # All config files paths
 $ConfigRootPath = Get-Path -Paths @("$GitRepositoryRoot",".github","workflows",".config")
 
+$SPDXCachePath = Get-Path -Paths @("$ConfigRootPath","SPDX_cache")
 $DotNetToolsManifestPath = Get-Path -Paths @("$ConfigRootPath","dotnet-tools","dotnet-tools.json")
 $NuGetAllowedLicensesPath = Get-Path -Paths @("$ConfigRootPath","nuget-license","allowed-licenses.json")
 $NuGetLicenseMappingsPath = Get-Path -Paths @("$ConfigRootPath","nuget-license","licenses-mapping.json")
@@ -111,7 +112,7 @@ $GitHubSourceUri = "https://nuget.pkg.github.com/$GitHubPackagesUser/index.json"
 $NuGetTestSourceUri = "https://apiint.nugettest.org/v3/index.json"
 $NuGetOrgSourceUri = "https://api.nuget.org/v3/index.json"
 Unregister-LocalNuGetDotNetPackageSource -SourceName "$GitHubSourceName"
-Invoke-Exec -Executable "dotnet" -Arguments @("nuget","add", "source", "--username", "$GitHubPackagesUser","--password","$NUGET_GITHUB_PUSH","--store-password-in-clear-text","--name","$GitHubSourceName","$GitHubSourceUri") -CaptureOutput $false -CaptureOutputDump $false -HideValues @($NUGET_GITHUB_PUSH)
+Invoke-ProcessTyped -Executable "dotnet" -Arguments @("nuget","add", "source", "--username", "$GitHubPackagesUser","--password","$NUGET_GITHUB_PUSH","--store-password-in-clear-text","--name","$GitHubSourceName","$GitHubSourceUri") -CaptureOutput $false -CaptureOutputDump $false -HideValues @($NUGET_GITHUB_PUSH)
 
 # Enable the .NET tools specified in the manifest file
 Enable-TempDotnetTools -ManifestFile "$DotNetToolsManifestPath" -NoReturn
@@ -198,7 +199,6 @@ foreach ($SolutionProjectPath in $SolutionProjectPaths) {
             "-p:UseSharedCompilation=false"
         )
 
-        #WRONG TODODODODODODODODO on class lib
         Invoke-ProcessTyped -Executable "drydock.exe" -Arguments @("csproj", "--location", "$($ProjectFileInfo.FullName)", "--property", "TargetFrameworkVersion") -ReturnType Objects -AllowedExitCodes @(0,-1) -CaptureOutput $false -CaptureOutputDump $true
 
         $IsSDKProj = $false
@@ -255,7 +255,6 @@ foreach ($SolutionProjectPath in $SolutionProjectPaths) {
             }
         }
 
-
         $IsTestProject = $false
         $IsPackable = $false
         $IsPublishable = $false
@@ -289,6 +288,9 @@ foreach ($SolutionProjectPath in $SolutionProjectPaths) {
 
             Invoke-ProcessTyped -Executable "nuget-license" -Arguments @("--input", "$($ProjectFileInfo.FullName)", "--allowed-license-types", "$NuGetAllowedLicensesPath", "--output", "JsonPretty", "--licenseurl-to-license-mappings" ,"$NuGetLicenseMappingsPath", "--file-output", "$ReportsDirectory/$($ProjectFileInfo.BaseName).ThirdPartyLicencesNotices.json" )
             New-ThirdPartyNotice -LicenseJsonPath "$ReportsDirectory/$($ProjectFileInfo.BaseName).ThirdPartyLicencesNotices.json" -OutputPath "$ReportsDirectory\$($ProjectFileInfo.BaseName).ThirdPartyLicencesNotices.txt" -Name "$($ProjectFileInfo.BaseName)"
+
+            Export-PackageLicenseTexts -JsonPath "$ReportsDirectory/$($ProjectFileInfo.BaseName).ThirdPartyLicencesNotices.json" -OutputDirectory "$ReportsDirectory\LICENSES" -CacheDirectory "$SPDXCachePath"
+            $x=1
         }
 
         if ($IsTestProject -eq $true)
@@ -325,14 +327,11 @@ foreach ($SolutionProjectPath in $SolutionProjectPaths) {
     }
 }
 
-#exit
-
 #$ThirdPartyLicencesNoticesFiles = Find-FilesByPattern -Path "$ReportsRootPath" -Pattern "*.ThirdPartyLicencesNotices.txt" | ForEach-Object { $_.FullName } 
 #$THIRDPARTYDirectory = New-Directory -Paths @($PublishDirectory,"THIRDPARTY-LICENSES-NOTICE")
 #Join-FileText -InputFiles @($ThirdPartyLicencesNoticesFiles) -OutputFile "$THIRDPARTYDirectory\THIRDPARTY-LICENSE-NOTICE" -BetweenFiles 'One'
 #$InventoryHealthReportFiles = Find-FilesByPattern -Path "$ReportsRootPath" -Pattern "*.Inventory-Health-Report.txt" | ForEach-Object { $_.FullName } 
 #Join-FileText -InputFiles @($InventoryHealthReportFiles) -OutputFile "$PublishDirectory\BOM-HEALTH" -BetweenFiles 'One'
-
 
 # Resolving deployment information for the current branch
 $DeploymentChannel = $BranchDeploymentConfig.Channel.Value
@@ -422,14 +421,11 @@ if ($PushToNuGetOrg -eq $true)
 foreach ($SolutionProjectPath in $SolutionProjectPaths) {
     foreach ($ProjectFileInfo in $SolutionProjectPath.Prj) {
         $SolutionFileInfo = $SolutionProjectPath.Sln
-            New-Directory -Paths @($BuildRootPath)
             $PublishDirectory = New-Directory -Paths @($PublishRootPath,$SolutionFileInfo.BaseName,$ProjectFileInfo.BaseName,$ChannelVersionRelativePath)
             $ReportsDirectory = New-Directory -Paths @($ReportsRootPath,$SolutionFileInfo.BaseName,$ProjectFileInfo.BaseName,$ChannelVersionRelativePath)
             $DocsDirectory = New-Directory -Paths @($DocsRootPath,$SolutionFileInfo.BaseName,$ProjectFileInfo.BaseName,$ChannelVersionRelativePath)
-
             Copy-FilesRecursively -SourceDirectory "$ReportsDirectory" -DestinationDirectory "$PublishDirectory\THIRDPARTY-LICENSE-NOTICE" -Filter "*.ThirdPartyLicencesNotices.txt" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $false
             Copy-FilesRecursively -SourceDirectory "$ReportsDirectory" -DestinationDirectory "$PublishDirectory\BOM-HEALTH-REPORT" -Filter "*.Inventory-Health-Report.txt" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $false
-            
             if (Test-Path -Path "$DocsDirectory\docfx" -PathType Container)
             {
                 Copy-FilesRecursively -SourceDirectory "$DocsDirectory\docfx" -DestinationDirectory "$PublishDirectory\DOCFX\$($ProjectFileInfo.BaseName)" -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $false
@@ -437,7 +433,7 @@ foreach ($SolutionProjectPath in $SolutionProjectPaths) {
      }
 }
 
-# repository based files stashing of files.
+# repository based drops of files.
 $RepoPublishDirectory = New-Directory -Paths @($RepoPublishRootPath,$ChannelVersionRelativePath)
 foreach ($SolutionProjectPath in $SolutionProjectPaths) {
     $SolutionFileInfo = $SolutionProjectPath.Sln
@@ -454,42 +450,33 @@ $nugetFileEmulation = Join-Text -InputObject @("$nugetFilePart1","$($BranchDeplo
 Compress-Directory -SourceDirectory "$RepoPublishDirectory" -DestinationFile "$(Get-Path -Paths @($RepositoryDropRootPath,$GitRepositoryName,"zipped","$nugetFileEmulation.zip"))"
 
 
-#solution based files stashing of files.
+# solution based drops of files.
 foreach ($SolutionProjectPath in $SolutionProjectPaths) {
     $SolutionFileInfo = $SolutionProjectPath.Sln
     $SolutionPublishDirectory = New-Directory -Paths @($SlnPublishRootPath,$SolutionFileInfo.BaseName,$ChannelVersionRelativePath)
     Remove-FilesByPattern -Path "$SolutionPublishDirectory" -Pattern "*"
-    
     foreach ($ProjectFileInfo in $SolutionProjectPath.Prj) {
             $PublishDirectory = New-Directory -Paths @($PublishRootPath,$SolutionFileInfo.BaseName,$ProjectFileInfo.BaseName,$ChannelVersionRelativePath)
             Copy-FilesRecursively -SourceDirectory "$PublishDirectory" -DestinationDirectory "$SolutionPublishDirectory" -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $false
     }
-
     Copy-FilesRecursively -SourceDirectory "$SolutionPublishDirectory" -DestinationDirectory (Get-Path -Paths @($SolutionsDropRootPath,$SolutionFileInfo.BaseName,$ChannelVersionRelativePath)) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
     Copy-FilesRecursively -SourceDirectory "$SolutionPublishDirectory" -DestinationDirectory (Get-Path -Paths @($SolutionsDropRootPath,$SolutionFileInfo.BaseName,$ChannelLatestRelativePath)) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
     Copy-FilesRecursively -SourceDirectory "$SolutionPublishDirectory" -DestinationDirectory (Get-Path -Paths @($SolutionsDropRootPath,$SolutionFileInfo.BaseName,"distributed")) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
-
     $nugetFilePart1 = Join-Text -InputObject @("$($SolutionFileInfo.BaseName)","$($GeneratedVersion.VersionFull)") -Separator '.' -Normalization Trim
     $nugetFileEmulation = Join-Text -InputObject @("$nugetFilePart1","$($BranchDeploymentConfig.Affix.Label)") -Separator '-' -Normalization Trim
     Compress-Directory -SourceDirectory "$SolutionPublishDirectory" -DestinationFile "$(Get-Path -Paths @($SolutionsDropRootPath,$SolutionFileInfo.BaseName,"zipped","$nugetFileEmulation.zip"))"
-    # Compress-Directory -SourceDirectory "$SolutionPublishDirectory" -DestinationFile "$(Get-Path -Paths @($SolutionsDropRootPath,"zipped","$nugetFileEmulation.zip"))"
 }
 
-# project based files stashing of files.
+# project based drops of files.
 foreach ($SolutionProjectPath in $SolutionProjectPaths) {
     $SolutionFileInfo = $SolutionProjectPath.Sln
     foreach ($ProjectFileInfo in $SolutionProjectPath.Prj) {
-
             $PublishDirectory = New-Directory -Paths @($PublishRootPath,$SolutionFileInfo.BaseName,$ProjectFileInfo.BaseName,$ChannelVersionRelativePath)
-            
             $ProjPublishDirectory = New-Directory -Paths @($ProjPublishRootPath,$ProjectFileInfo.BaseName,$ChannelVersionRelativePath)
-        
             Copy-FilesRecursively -SourceDirectory "$PublishDirectory" -DestinationDirectory "$ProjPublishDirectory" -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $false
-
             Copy-FilesRecursively -SourceDirectory "$ProjPublishDirectory" -DestinationDirectory (Get-Path -Paths @($ProjectsDropRootPath,$ProjectFileInfo.BaseName,$ChannelVersionRelativePath)) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
             Copy-FilesRecursively -SourceDirectory "$ProjPublishDirectory" -DestinationDirectory (Get-Path -Paths @($ProjectsDropRootPath,$ProjectFileInfo.BaseName,$ChannelLatestRelativePath)) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
             Copy-FilesRecursively -SourceDirectory "$ProjPublishDirectory" -DestinationDirectory (Get-Path -Paths @($ProjectsDropRootPath,$ProjectFileInfo.BaseName,"distributed")) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination $true
-
             $nugetFilePart1 = Join-Text -InputObject @("$($ProjectFileInfo.BaseName)","$($GeneratedVersion.VersionFull)") -Separator '.' -Normalization Trim
             $nugetFileEmulation = Join-Text -InputObject @("$nugetFilePart1","$($BranchDeploymentConfig.Affix.Label)") -Separator '-' -Normalization Trim
             Compress-Directory -SourceDirectory "$ProjPublishDirectory" -DestinationFile "$(Get-Path -Paths @($ProjectsDropRootPath,$ProjectFileInfo.BaseName,"zipped","$nugetFileEmulation.zip"))"
