@@ -290,7 +290,6 @@ foreach ($SolutionProjectPath in $SolutionProjectPaths) {
             New-ThirdPartyNotice -LicenseJsonPath "$ReportsDirectory/$($ProjectFileInfo.BaseName).ThirdPartyLicencesNotices.json" -OutputPath "$ReportsDirectory\$($ProjectFileInfo.BaseName).ThirdPartyLicencesNotices.txt" -Name "$($ProjectFileInfo.BaseName)"
 
             Export-PackageLicenseTexts -JsonPath "$ReportsDirectory/$($ProjectFileInfo.BaseName).ThirdPartyLicencesNotices.json" -OutputDirectory "$ReportsDirectory" -CacheDirectory "$SPDXCachePath"
-            $x=1
         }
 
         if ($IsTestProject -eq $true)
