@@ -47,6 +47,10 @@ Test-PsGalleryPublishPrereqsOffline -ExitOnFailure
 # Clean up previous versions of the module to avoid conflicts in local PowerShell environments
 Uninstall-PreviousModuleVersions -ModuleName 'Eigenverft.Manifested.Drydock'
 
+# Verify required commands are available, even a windows update could remove them temporarily
+$null = Test-CommandAvailable -Command "dotnet" -ExitIfNotFound
+$null = Test-CommandAvailable -Command "git" -ExitIfNotFound
+
 # In the case the secrets are not passed as parameters, try to get them from the secrets file, local development or CI/CD environment
 $NUGET_GITHUB_PUSH = Get-ConfigValue -Check $NUGET_GITHUB_PUSH -FilePath (Join-Path $PSScriptRoot 'cicd.secrets.json') -Property 'NUGET_GITHUB_PUSH'
 $NUGET_PAT = Get-ConfigValue -Check $NUGET_PAT -FilePath (Join-Path $PSScriptRoot 'cicd.secrets.json') -Property 'NUGET_PAT'
@@ -56,10 +60,6 @@ Test-VariableValue -Variable { $NUGET_GITHUB_PUSH } -ExitIfNullOrEmpty -HideValu
 Test-VariableValue -Variable { $NUGET_PAT } -ExitIfNullOrEmpty -HideValue
 Test-VariableValue -Variable { $NUGET_TEST_PAT } -ExitIfNullOrEmpty -HideValue
 Test-VariableValue -Variable { $PsGalleryApiKey } -ExitIfNullOrEmpty -HideValue
-
-# Verify required commands are available, even a windows update could remove them temporarily
-$null = Test-CommandAvailable -Command "dotnet" -ExitIfNotFound
-$null = Test-CommandAvailable -Command "git" -ExitIfNotFound
 
 # Preload environment information
 $RunEnvironment = Get-RunEnvironment
