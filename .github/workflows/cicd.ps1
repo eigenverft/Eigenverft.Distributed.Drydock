@@ -31,7 +31,7 @@ $RemoteResourcesAvailable = Test-RemoteResourcesAvailable -Quiet
 # Ensure connectivity to PowerShell Gallery before attempting module installation, if not assuming being offline, installation is present check existance with Test-ModuleAvailable
 if ($RemoteResourcesAvailable)
 {
-    Update-ModuleIfNeeded -ModuleName 'Eigenverft.Manifested.Drydock'
+    Update-ModuleIfNeeded2 -ModuleName 'Eigenverft.Manifested.Drydock'
     #Install-Module -Name 'Eigenverft.Manifested.Drydock' -Repository "PSGallery" -Scope CurrentUser -Force -AllowClobber -AllowPrerelease -ErrorAction Stop
     # Install the required modules to run this script, Eigenverft.Manifested.Drydock needs to be Powershell 5.1 and Powershell 7+ compatible
 }
