@@ -1,16 +1,10 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.CommandLine;
-using System.IO;
-using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
 using Eigenverft.Distributed.Drydock.CommandDeclaration;
 
-using Microsoft.Build.Evaluation;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 

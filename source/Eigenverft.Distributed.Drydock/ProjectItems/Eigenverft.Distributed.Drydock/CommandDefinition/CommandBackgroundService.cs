@@ -1,10 +1,7 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.CommandLine;
 using System.CommandLine.Help;
 using System.CommandLine.Invocation;
-using System.ComponentModel.DataAnnotations;
-using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,8 +9,6 @@ using System.Threading.Tasks;
 using Eigenverft.Distributed.Drydock.CommandDeclaration;
 using Eigenverft.Distributed.Drydock.Services;
 
-using Microsoft.Build.Construction;
-using Microsoft.Build.Evaluation;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
