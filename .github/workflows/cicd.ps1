@@ -432,6 +432,15 @@ foreach ($SolutionProjectPath in $SolutionProjectPaths) {
      }
 }
 
+# additional publish cleanups
+foreach ($SolutionProjectPath in $SolutionProjectPaths) {
+    foreach ($ProjectFileInfo in $SolutionProjectPath.Prj) {
+        $SolutionFileInfo = $SolutionProjectPath.Sln
+            $PublishDirectory = New-Directory -Paths @($PublishRootPath,$SolutionFileInfo.BaseName,$ProjectFileInfo.BaseName,$ChannelVersionRelativePath)
+            Remove-FilesByPattern -Path "$PublishDirectory" -Pattern "*.pdb"
+     }
+}
+
 # repository based drops of files.
 $RepoPublishDirectory = New-Directory -Paths @($RepoPublishRootPath,$ChannelVersionRelativePath)
 foreach ($SolutionProjectPath in $SolutionProjectPaths) {
