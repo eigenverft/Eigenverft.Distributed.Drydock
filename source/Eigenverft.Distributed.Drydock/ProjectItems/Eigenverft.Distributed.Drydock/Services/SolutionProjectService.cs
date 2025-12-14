@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -8,6 +9,8 @@ using Eigenverft.Distributed.Drydock.CommandDeclaration;
 
 using Microsoft.Build.Construction;
 using Microsoft.Extensions.Logging;
+using Microsoft.VisualStudio.SolutionPersistence.Model;
+using Microsoft.VisualStudio.SolutionPersistence.Serializer;
 
 namespace Eigenverft.Distributed.Drydock.Services
 {
@@ -52,38 +55,60 @@ namespace Eigenverft.Distributed.Drydock.Services
         public async Task<List<string>> GetCsProjAbsolutPathsFromSolutions(string solutionLocation, CancellationToken cancellationToken)
         {
             List<string> retval = new List<string>();
+
             try
             {
-                List<ProjectInSolution> sln = SolutionFile.Parse(solutionLocation).ProjectsInOrder.Where(e => e.ProjectType == SolutionProjectType.KnownToBeMSBuildFormat).ToList();
-                List<ProjectRootElement> projects = new List<ProjectRootElement>();
+                // Load solution (.sln OR .slnx)
+                var serializer = SolutionSerializers.GetSerializerByMoniker(solutionLocation);
+                if (serializer is null)
+                {
+                    _logger.LogError("Unsupported solution file type: {SolutionLocation}", solutionLocation);
+                    return null;
+                }
 
-                // Load each project file.
-                foreach (var item in sln)
+                SolutionModel solution;
+                try
+                {
+                    solution = await serializer.OpenAsync(solutionLocation, cancellationToken);
+                }
+                catch (SolutionException ex)
+                {
+                    _logger.LogError(ex, "Failed to parse solution file: {SolutionLocation}", solutionLocation);
+                    return null;
+                }
+
+                string solutionDir = Path.GetDirectoryName(Path.GetFullPath(solutionLocation)) ?? Directory.GetCurrentDirectory();
+
+                // Keep it simple: only take csproj entries
+                var csprojPaths = solution.SolutionProjects
+                    .Select(p => p.FilePath)
+                    .Where(p => p.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
+                    .Select(p => Path.GetFullPath(Path.Combine(solutionDir, p)))
+                    .ToList();
+
+                if (csprojPaths.Count == 0)
+                {
+                    _logger.LogWarning("Solution contained no C# projects: {SolutionLocation}", solutionLocation);
+                    return null;
+                }
+
+                // Load each project file (your existing logic)
+                List<ProjectRootElement> projects = new List<ProjectRootElement>();
+                foreach (var projectPath in csprojPaths)
                 {
                     try
                     {
-                        ProjectRootElement projectRoot = ProjectRootElement.Open(item.AbsolutePath);
-
-                        var globalProperties = new Dictionary<string, string>
-                        {
-                            ["Configuration"] = "Debug",
-                            ["Platform"] = "AnyCPU",
-                            //["MSBuildRuntimeType"] = "Core"
-                        };
-
-                        //var projectload = new Project(item.AbsolutePath, globalProperties, null);
-
+                        ProjectRootElement projectRoot = ProjectRootElement.Open(projectPath);
                         projects.Add(projectRoot);
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Failed to open project file: {ProjectLocation}", item.AbsolutePath);
+                        _logger.LogError(ex, "Failed to open project file: {ProjectLocation}", projectPath);
                         return null;
                     }
                 }
 
-                // Sort projects so that any project that has a PackageReference with Include="Microsoft.NET.Test.Sdk" appears first.
-                // Test projects: projects with any PackageReference that has Include "Microsoft.NET.Test.Sdk".
+                // Your existing sorting logic (unchanged)
                 var testProjects = projects.Where(project =>
                     project.Items.Any(item =>
                         item.ElementName == "PackageReference" &&
@@ -91,7 +116,6 @@ namespace Eigenverft.Distributed.Drydock.Services
                     )
                 ).ToList();
 
-                // Non-test projects: projects that do NOT have any PackageReference with Include "Microsoft.NET.Test.Sdk".
                 var nonTestProjects = projects.Where(project =>
                     !project.Items.Any(item =>
                         item.ElementName == "PackageReference" &&
@@ -99,40 +123,25 @@ namespace Eigenverft.Distributed.Drydock.Services
                     )
                 ).ToList();
 
-                nonTestProjects = nonTestProjects.OrderBy(
-                    i => i.Items.Any(f => f.ElementName.Contains("ProjectReference"))
-                    ).ToList();
+                nonTestProjects = nonTestProjects
+                    .OrderBy(i => i.Items.Any(f => f.ElementName.Contains("ProjectReference")))
+                    .ToList();
 
-                foreach (var item in testProjects)
-                {
-                    retval.Add(item.FullPath);
-                }
+                foreach (var item in testProjects) retval.Add(item.FullPath);
+                foreach (var item in nonTestProjects) retval.Add(item.FullPath);
 
-                foreach (var item in nonTestProjects)
-                {
-                    retval.Add(item.FullPath);
-                }
-
-                //projects.Items.where // dont' know here items ElementName == "PackageReference" and on this if there is an Include == "Microsoft.NET.Test.Sdk" this project should be sorted first.
-                //projects.OrderBy(e => e.Items == "PackageReference");
-
-                if (retval.Count == 0)
-                {
-                    _logger.LogWarning("No csproj files were found in the solution: {SolutionLocation}", solutionLocation);
-                    return null;
-                }
-                else
-                {
-                    //_logger.LogDebug("Found {Count} csproj files in the solution: {SolutionLocation}", retval.Count, solutionLocation);
-                }
+                return retval.Count == 0 ? null : retval;
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogWarning("Solution parsing canceled: {SolutionLocation}", solutionLocation);
+                return null;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error while parsing the solution file: {SolutionLocation}", solutionLocation);
                 throw;
             }
-
-            return retval;
         }
 
         public async Task<string?> GetProjectProperty(string projectLocation, string? propertyName, CsProjCommand.ElementScope? scopeType, CancellationToken cancellationToken)

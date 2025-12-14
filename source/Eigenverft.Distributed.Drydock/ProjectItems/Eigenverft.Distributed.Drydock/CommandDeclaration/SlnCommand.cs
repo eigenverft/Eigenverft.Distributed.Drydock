@@ -18,7 +18,7 @@ namespace Eigenverft.Distributed.Drydock.CommandDeclaration
         {
             Location = new("--location")
             {
-                Description = "Full path to the target solution file (.sln).",
+                Description = "Full path to the target solution file (.sln or .slnx).",
                 Required = true,
             };
 
