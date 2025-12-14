@@ -349,8 +349,8 @@ $PushToNuGetOrg = $false
 if ($DeploymentChannel -in @("development"))
 {
     $PushToLocalSource = $true
-    $PushToGitHubSource = $false
-    $PushToNuGetTest = $false
+    $PushToGitHubSource = $true
+    $PushToNuGetTest = $true
     $PushToNuGetOrg = $false
 }
 
