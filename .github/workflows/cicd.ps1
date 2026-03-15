@@ -51,7 +51,12 @@ Uninstall-PreviousModuleVersions -ModuleName 'Eigenverft.Manifested.Drydock'
 $null = Test-CommandAvailable -Command "dotnet" -ExitIfNotFound
 $null = Test-CommandAvailable -Command "git" -ExitIfNotFound
 
+
 # In the case the secrets are not passed as parameters, try to get them from the secrets file, local development or CI/CD environment
+Test-VariableValue -Variable { $NUGET_GITHUB_PUSH } -WarnIfNullOrEmpty -HideValue
+Test-VariableValue -Variable { $NUGET_PAT } -WarnIfNullOrEmpty -HideValue
+Test-VariableValue -Variable { $NUGET_TEST_PAT } -WarnIfNullOrEmpty -HideValue
+Test-VariableValue -Variable { $PsGalleryApiKey } -WarnIfNullOrEmpty -HideValue
 $NUGET_GITHUB_PUSH = Get-ConfigValue -Check $NUGET_GITHUB_PUSH -FilePath (Join-Path $PSScriptRoot 'cicd.secrets.json') -Property 'NUGET_GITHUB_PUSH'
 $NUGET_PAT = Get-ConfigValue -Check $NUGET_PAT -FilePath (Join-Path $PSScriptRoot 'cicd.secrets.json') -Property 'NUGET_PAT'
 $NUGET_TEST_PAT = Get-ConfigValue -Check $NUGET_TEST_PAT -FilePath (Join-Path $PSScriptRoot 'cicd.secrets.json') -Property 'NUGET_TEST_PAT'
@@ -142,7 +147,7 @@ $ReportsRootPath =  Get-Path -Paths @("$OutputRootPath","reports")
 $DocsRootPath = Get-Path -Paths @("$OutputRootPath","docs")
 
 # Initialize the array to accumulate projects.
-$SolutionFileInfos = Find-FilesByPattern -Path "$GitRepositoryRoot\source" -Pattern "*.sln"
+$SolutionFileInfos = Find-FilesByPattern -Path "$GitRepositoryRoot\source" -Pattern "*.sln;*.slnx"
 $SolutionProjectPaths = @()
 foreach ($solutionFile in $SolutionFileInfos) {
     # all ready sorted by the drydock.exe
