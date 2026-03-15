@@ -6,14 +6,14 @@ Command-line .NET tool for inspecting `.sln` and `.csproj` files and extracting 
 
 The packaged tool command name is `drydock`.
 
-## Capabilities
+## ▸ Capabilities
 
 - Read solution files and enumerate project paths.
 - Extract project properties from SDK-style and non-SDK-style `.csproj` files.
 - Surface MSBuild values for automation scenarios.
 - Support repository workflows that build, pack, publish, and analyze .NET projects.
 
-## Local build
+## ▸ Local Build
 
 Build the main solution:
 
@@ -27,4 +27,10 @@ If you change the sample WinForms project items, also validate:
 dotnet build .\source\MyForms.sln
 ```
 
+## ▸ Contributing
+
 See [CONTRIBUTING.md](CONTRIBUTING.md) for pull request and validation guidance.
+
+---
+
+Made with care by [Eigenverft](https://github.com/eigenverft).
