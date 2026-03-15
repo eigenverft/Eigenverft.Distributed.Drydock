@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skill Manager"
+  short_description: "Manage skills from the git-root workspace"
+  default_prompt: "Use $skill-manager to create, update, delete, and validate skills."

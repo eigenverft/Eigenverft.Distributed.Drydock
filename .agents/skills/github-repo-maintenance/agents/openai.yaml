@@ -1,0 +1,4 @@
+interface:
+  display_name: "GitHub Repo Maintenance"
+  short_description: "Auto-reconcile GitHub repo metadata and README polish"
+  default_prompt: "Use $github-repo-maintenance to inspect current GitHub state first, then auto-reconcile missing or stale repository metadata, community surface, and applicable README presentation polish from the README and repo content with minimal churn."
