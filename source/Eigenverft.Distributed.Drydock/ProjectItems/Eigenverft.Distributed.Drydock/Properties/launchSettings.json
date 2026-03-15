@@ -2,7 +2,7 @@
   "profiles": {
     "Eigenverft.Distributed.Drydock": {
       "commandName": "Project",
-      "commandLineArgs": "projtype --location \"C:\\dev\\github.com\\eigenverft\\Eigenverft.Distributed.Drydock\\source\\MyForms\\ProjectItems\\WindowsFormsAppNonSDK\\WindowsFormsAppNonSDK.csproj\""
+      "commandLineArgs": "sln --location C:\\dev\\github.com\\eigenverft\\Eigenverft.Routed.RequestFilters\\source\\Eigenverft.Routed.RequestFilters.slnx"
     }
   }
 }
