@@ -36,11 +36,15 @@ namespace Eigenverft.Distributed.Drydock.CommandDefinition
             CsProjCommand.Command.SetAction(CsProjCommandAsync);
             SlnCommand.Command.SetAction(SlnCommandAsync);
             ProjTypeCommand.Command.SetAction(ProjTypeCommandAsync);
+            MarkdownCommand.Command.SetAction(MarkdownCommandAsync);
+            HtmlToPdfCommand.Command.SetAction(HtmlToPdfCommandAsync);
 
             //rootCommand.Subcommands.Add(ReadCommand.Command);
             rootCommand.Subcommands.Add(CsProjCommand.Command);
             rootCommand.Subcommands.Add(SlnCommand.Command);
             rootCommand.Subcommands.Add(ProjTypeCommand.Command);
+            rootCommand.Subcommands.Add(MarkdownCommand.Command);
+            rootCommand.Subcommands.Add(HtmlToPdfCommand.Command);
 
         }
 

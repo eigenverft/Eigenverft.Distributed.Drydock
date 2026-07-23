@@ -44,7 +44,7 @@
 
 	<!-- Company and copyright information -->
 	<PropertyGroup>
-		<Copyright>Copyright (c) 2025 $(Branding)</Copyright>
+		<Copyright>Copyright (c) 2026 $(Branding)</Copyright>
 		<Company></Company>
 	</PropertyGroup>
 
@@ -121,6 +121,8 @@
 		<PackageReference Include="Serilog.Sinks.Async" Version="2.1.0" />
 		<PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
 		<PackageReference Include="System.CommandLine" Version="2.0.0-beta5.25306.1" />
+		<PackageReference Include="Markdig" Version="0.40.0" />
+		<PackageReference Include="PuppeteerSharp" Version="24.40.0" />
 		<PackageReference Include="Microsoft.VisualStudio.SolutionPersistence" Version="1.0.52" />
 	</ItemGroup>
 

@@ -7,10 +7,15 @@ using System.Threading.Tasks;
 
 using Eigenverft.Distributed.Drydock.CommandDeclaration;
 
+using Markdig;
+
 using Microsoft.Build.Construction;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.SolutionPersistence.Model;
 using Microsoft.VisualStudio.SolutionPersistence.Serializer;
+
+using PuppeteerSharp;
+using PuppeteerSharp.BrowserData;
 
 namespace Eigenverft.Distributed.Drydock.Services
 {
@@ -38,6 +43,10 @@ namespace Eigenverft.Distributed.Drydock.Services
         Task<string?> GetProjectProperty(string projectLocation, string? propertyName, CsProjCommand.ElementScope? scopeType, CancellationToken cancellationToken);
 
         Task<string?> GetProjectInfo(string projectLocation, ProjTypeCommand.ReturnEnum? scopeType, CancellationToken cancellationToken);
+
+        Task<bool> ConvertMarkdownToHtml(string inputLocation, string outputLocation, CancellationToken cancellationToken);
+
+        Task<bool> ConvertHtmlToPdf(string inputLocation, string outputLocation, string? browserCacheLocation, CancellationToken cancellationToken);
     }
 
     /// <summary>
@@ -242,6 +251,235 @@ namespace Eigenverft.Distributed.Drydock.Services
                     _logger.LogWarning("Requested return type '{ReturnType}' is not supported for project: {ProjectLocation}", returnType, projectLocation);
                     return null;
             }
+        }
+
+        public async Task<bool> ConvertMarkdownToHtml(string inputLocation, string outputLocation, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(inputLocation))
+            {
+                _logger.LogWarning("No markdown input file was specified.");
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(outputLocation))
+            {
+                _logger.LogWarning("No html output file was specified.");
+                return false;
+            }
+
+            string fullInputLocation;
+            string fullOutputLocation;
+
+            try
+            {
+                fullInputLocation = Path.GetFullPath(inputLocation);
+                fullOutputLocation = Path.GetFullPath(outputLocation);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to resolve markdown conversion paths.");
+                return false;
+            }
+
+            if (!File.Exists(fullInputLocation))
+            {
+                _logger.LogWarning("Markdown input file was not found: {InputFile}", fullInputLocation);
+                return false;
+            }
+
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                string? outputDirectory = Path.GetDirectoryName(fullOutputLocation);
+                if (!string.IsNullOrWhiteSpace(outputDirectory))
+                {
+                    Directory.CreateDirectory(outputDirectory);
+                }
+
+                string markdown = await File.ReadAllTextAsync(fullInputLocation, cancellationToken);
+                string html = Markdown.ToHtml(markdown);
+
+                await File.WriteAllTextAsync(fullOutputLocation, html, cancellationToken);
+
+                return true;
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogWarning("Markdown conversion canceled for input file: {InputFile}", fullInputLocation);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to convert markdown file '{InputFile}' to html file '{OutputFile}'.", fullInputLocation, fullOutputLocation);
+                return false;
+            }
+        }
+
+        public async Task<bool> ConvertHtmlToPdf(string inputLocation, string outputLocation, string? browserCacheLocation, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(inputLocation))
+            {
+                _logger.LogWarning("No html input file was specified.");
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(outputLocation))
+            {
+                _logger.LogWarning("No pdf output file was specified.");
+                return false;
+            }
+
+            string fullInputLocation;
+            string fullOutputLocation;
+            string fullBrowserCacheLocation;
+
+            try
+            {
+                fullInputLocation = Path.GetFullPath(inputLocation);
+                fullOutputLocation = Path.GetFullPath(outputLocation);
+                fullBrowserCacheLocation = ResolveBrowserCacheLocation(browserCacheLocation);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to resolve html to pdf conversion paths.");
+                return false;
+            }
+
+            if (!File.Exists(fullInputLocation))
+            {
+                _logger.LogWarning("Html input file was not found: {InputFile}", fullInputLocation);
+                return false;
+            }
+
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                string? outputDirectory = Path.GetDirectoryName(fullOutputLocation);
+                if (!string.IsNullOrWhiteSpace(outputDirectory))
+                {
+                    Directory.CreateDirectory(outputDirectory);
+                }
+
+                Directory.CreateDirectory(fullBrowserCacheLocation);
+
+                string html = await File.ReadAllTextAsync(fullInputLocation, cancellationToken);
+                string htmlWithBaseHref = EnsureHtmlHasBaseHref(html, fullInputLocation);
+
+                var fetcher = Puppeteer.CreateBrowserFetcher(new BrowserFetcherOptions
+                {
+                    Path = fullBrowserCacheLocation,
+                });
+
+                string buildId = Chrome.DefaultBuildId;
+
+                var installedBrowser = fetcher
+                    .GetInstalledBrowsers()
+                    .FirstOrDefault(browser => browser.BuildId == buildId);
+
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (installedBrowser is null)
+                {
+                    installedBrowser = await fetcher.DownloadAsync(buildId);
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+
+                await using var browser = await Puppeteer.LaunchAsync(new LaunchOptions
+                {
+                    Headless = true,
+                    ExecutablePath = installedBrowser.GetExecutablePath(),
+                });
+
+                await using var page = await browser.NewPageAsync();
+
+                await page.SetContentAsync(htmlWithBaseHref);
+                await page.PdfAsync(fullOutputLocation, new PdfOptions
+                {
+                    Format = PuppeteerSharp.Media.PaperFormat.A4,
+                    PrintBackground = true,
+                });
+
+                return true;
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogWarning("Html to pdf conversion canceled for input file: {InputFile}", fullInputLocation);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to convert html file '{InputFile}' to pdf file '{OutputFile}'.", fullInputLocation, fullOutputLocation);
+                return false;
+            }
+        }
+
+        private static string ResolveBrowserCacheLocation(string? browserCacheLocation)
+        {
+            if (!string.IsNullOrWhiteSpace(browserCacheLocation))
+            {
+                return Path.GetFullPath(browserCacheLocation);
+            }
+
+            string? localApplicationData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (!string.IsNullOrWhiteSpace(localApplicationData))
+            {
+                return Path.Combine(localApplicationData, "Eigenverft", "Distributed.Drydock", "chromium");
+            }
+
+            return Path.Combine(AppContext.BaseDirectory, "chromium");
+        }
+
+        private static string EnsureHtmlHasBaseHref(string html, string inputLocation)
+        {
+            if (html.IndexOf("<base", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return html;
+            }
+
+            string? inputDirectory = Path.GetDirectoryName(inputLocation);
+            if (string.IsNullOrWhiteSpace(inputDirectory))
+            {
+                return html;
+            }
+
+            string baseHref = new Uri(AppendDirectorySeparator(Path.GetFullPath(inputDirectory))).AbsoluteUri;
+            string baseTag = $"<base href=\"{baseHref}\" />";
+
+            int headIndex = html.IndexOf("<head", StringComparison.OrdinalIgnoreCase);
+            if (headIndex >= 0)
+            {
+                int headCloseIndex = html.IndexOf('>', headIndex);
+                if (headCloseIndex >= 0)
+                {
+                    return html.Insert(headCloseIndex + 1, baseTag);
+                }
+            }
+
+            int htmlIndex = html.IndexOf("<html", StringComparison.OrdinalIgnoreCase);
+            if (htmlIndex >= 0)
+            {
+                int htmlCloseIndex = html.IndexOf('>', htmlIndex);
+                if (htmlCloseIndex >= 0)
+                {
+                    return html.Insert(htmlCloseIndex + 1, $"<head>{baseTag}</head>");
+                }
+            }
+
+            return $"<head>{baseTag}</head>{html}";
+        }
+
+        private static string AppendDirectorySeparator(string path)
+        {
+            if (path.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal) ||
+                path.EndsWith(Path.AltDirectorySeparatorChar.ToString(), StringComparison.Ordinal))
+            {
+                return path;
+            }
+
+            return path + Path.DirectorySeparatorChar;
         }
 
     }
