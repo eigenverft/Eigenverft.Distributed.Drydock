@@ -419,5 +419,11 @@ FodyWeavers.xsd
 
 # Ignore files with any variation of "secret" in the name
 *[Ss][Ee][Cc][Rr][Ee][Tt]*
+*[Kk][Ee][Yy]*
 /output/
 .github/workflows/.config/docfx/build/docfx_local.json
+# Agent template overlay (source of truth: Eigenverft.Template.Agents)
+AGENTS.md
+AGENTS/
+.agents/**/*
+
