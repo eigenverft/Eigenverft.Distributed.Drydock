@@ -1,8 +1,8 @@
 param (
     [string]$NUGET_GITHUB_PUSH,
-    [string]$NUGET_PAT,
-    [string]$NUGET_TEST_PAT,
-    [string]$PsGalleryApiKey
+    [string]$NuGetApiKey,
+    [string]$IntTestNuGetApiKey,
+    [string]$PowerShellGalleryApiKey
 )
 
 # Fail-fast defaults for reliable CI/local runs:
@@ -54,17 +54,17 @@ $null = Test-CommandAvailable -Command "git" -ExitIfNotFound
 
 # In the case the secrets are not passed as parameters, try to get them from the secrets file, local development or CI/CD environment
 Test-VariableValue -Variable { $NUGET_GITHUB_PUSH } -WarnIfNullOrEmpty -HideValue
-Test-VariableValue -Variable { $NUGET_PAT } -WarnIfNullOrEmpty -HideValue
-Test-VariableValue -Variable { $NUGET_TEST_PAT } -WarnIfNullOrEmpty -HideValue
-Test-VariableValue -Variable { $PsGalleryApiKey } -WarnIfNullOrEmpty -HideValue
+Test-VariableValue -Variable { $NuGetApiKey } -WarnIfNullOrEmpty -HideValue
+Test-VariableValue -Variable { $IntTestNuGetApiKey } -WarnIfNullOrEmpty -HideValue
+Test-VariableValue -Variable { $PowerShellGalleryApiKey } -WarnIfNullOrEmpty -HideValue
 $NUGET_GITHUB_PUSH = Get-ConfigValue -Check $NUGET_GITHUB_PUSH -FilePath (Join-Path $PSScriptRoot 'cicd.secrets.json') -Property 'NUGET_GITHUB_PUSH'
-$NUGET_PAT = Get-ConfigValue -Check $NUGET_PAT -FilePath (Join-Path $PSScriptRoot 'cicd.secrets.json') -Property 'NUGET_PAT'
-$NUGET_TEST_PAT = Get-ConfigValue -Check $NUGET_TEST_PAT -FilePath (Join-Path $PSScriptRoot 'cicd.secrets.json') -Property 'NUGET_TEST_PAT'
-$PsGalleryApiKey = Get-ConfigValue -Check $PsGalleryApiKey -FilePath (Join-Path $PSScriptRoot 'cicd.secrets.json') -Property 'PsGalleryApiKey'
+$NuGetApiKey = Get-ConfigValue -Check $NuGetApiKey -FilePath (Join-Path $PSScriptRoot 'cicd.secrets.json') -Property 'NUGET_PAT'
+$IntTestNuGetApiKey = Get-ConfigValue -Check $IntTestNuGetApiKey -FilePath (Join-Path $PSScriptRoot 'cicd.secrets.json') -Property 'NUGET_TEST_PAT'
+$PowerShellGalleryApiKey = Get-ConfigValue -Check $PowerShellGalleryApiKey -FilePath (Join-Path $PSScriptRoot 'cicd.secrets.json') -Property 'PsGalleryApiKey'
 Test-VariableValue -Variable { $NUGET_GITHUB_PUSH } -ExitIfNullOrEmpty -HideValue
-Test-VariableValue -Variable { $NUGET_PAT } -ExitIfNullOrEmpty -HideValue
-Test-VariableValue -Variable { $NUGET_TEST_PAT } -ExitIfNullOrEmpty -HideValue
-Test-VariableValue -Variable { $PsGalleryApiKey } -ExitIfNullOrEmpty -HideValue
+Test-VariableValue -Variable { $NuGetApiKey } -ExitIfNullOrEmpty -HideValue
+Test-VariableValue -Variable { $IntTestNuGetApiKey } -ExitIfNullOrEmpty -HideValue
+Test-VariableValue -Variable { $PowerShellGalleryApiKey } -ExitIfNullOrEmpty -HideValue
 
 # Preload environment information
 $RunEnvironment = Get-RunEnvironment
@@ -408,7 +408,7 @@ if ($PushToNuGetTest -eq $true)
     $NuGetPackageFileInfos = Find-FilesByPattern -Path "$PackRootPath" -Pattern "*.nupkg"
     foreach ($NuGetPackageFileInfo in $NuGetPackageFileInfos)
     {
-        Invoke-ProcessTyped -Executable "dotnet" -Arguments @("nuget","push", "$($NuGetPackageFileInfo.FullName)", "--api-key", "$NUGET_TEST_PAT","--source","$NuGetTestSourceUri") -HideValues @($NUGET_TEST_PAT)
+        Invoke-ProcessTyped -Executable "dotnet" -Arguments @("nuget","push", "$($NuGetPackageFileInfo.FullName)", "--api-key", "$IntTestNuGetApiKey","--source","$NuGetTestSourceUri") -HideValues @($IntTestNuGetApiKey)
     }
 }
 
@@ -417,7 +417,7 @@ if ($PushToNuGetOrg -eq $true)
     $NuGetPackageFileInfos = Find-FilesByPattern -Path "$PackRootPath" -Pattern "*.nupkg"
     foreach ($NuGetPackageFileInfo in $NuGetPackageFileInfos)
     {
-        Invoke-ProcessTyped -Executable "dotnet" -Arguments @("nuget","push", "$($NuGetPackageFileInfo.FullName)", "--api-key", "$NUGET_PAT","--source","$NuGetOrgSourceUri") -HideValues @($NUGET_PAT)
+        Invoke-ProcessTyped -Executable "dotnet" -Arguments @("nuget","push", "$($NuGetPackageFileInfo.FullName)", "--api-key", "$NuGetApiKey","--source","$NuGetOrgSourceUri") -HideValues @($NuGetApiKey)
     }
 }
 
