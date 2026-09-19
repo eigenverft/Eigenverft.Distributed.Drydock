@@ -39,158 +39,6 @@ if ($PowerShellGalleryAvailable)
 Import-Module -Name 'Eigenverft.Manifested.Drydock' -Force -ErrorAction Stop
 $null = Test-ModuleAvailable -Name 'Eigenverft.Manifested.Drydock' -IncludePrerelease -ExitIfNotFound -Quiet
 
-function Restore-DotnetProjectProperties {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory = $true)]
-        [System.IO.FileInfo]$ProjectFileInfo,
-
-        [Parameter(Mandatory = $true)]
-        [string[]]$CommonArguments,
-
-        [Parameter(Mandatory = $true)]
-        [object]$GeneratedVersion,
-
-        [Parameter(Mandatory = $true)]
-        [AllowEmptyString()]
-        [string]$GeneratedVersionSuffix
-    )
-
-    # This is the first regular restore in the restore-clean-restore sequence. It also
-    # evaluates the project state required by the remaining linear processing steps.
-    $ProjectPropertyOutput = Invoke-ProcessTyped `
-        -Executable 'dotnet' `
-        -Arguments @(
-            'restore',
-            $ProjectFileInfo.FullName,
-            '-nologo',
-            '-p:Stage=restore',
-            '-getProperty:UsingMicrosoftNETSdk',
-            '-getProperty:TargetFrameworkVersion',
-            '-getProperty:TargetFramework',
-            '-getProperty:TargetFrameworks',
-            '-getProperty:IsTestProject',
-            '-getProperty:IsPackable',
-            '-getProperty:IsPublishable',
-            '-getProperty:IsCicdEnabled',
-            '-getProperty:GitVersionBaseDirectory'
-        ) `
-        -CommonArguments $CommonArguments `
-        -ReturnType Text `
-        -CaptureOutput $true
-
-    try
-    {
-        $EvaluatedProperties = ($ProjectPropertyOutput | ConvertFrom-Json -ErrorAction Stop).Properties
-    }
-    catch
-    {
-        throw "dotnet restore returned invalid project properties for '$($ProjectFileInfo.FullName)': $($_.Exception.Message)"
-    }
-
-    $IsSDKProj = [string]::Equals([string]$EvaluatedProperties.UsingMicrosoftNETSdk, 'true', [System.StringComparison]::OrdinalIgnoreCase)
-    $IsNoneSDKProj = -not $IsSDKProj
-
-    $TargetFrameworks = @()
-    if (-not [string]::IsNullOrWhiteSpace([string]$EvaluatedProperties.TargetFramework))
-    {
-        $TargetFrameworks = @([string]$EvaluatedProperties.TargetFramework)
-    }
-    elseif (-not [string]::IsNullOrWhiteSpace([string]$EvaluatedProperties.TargetFrameworks))
-    {
-        $TargetFrameworks = @(([string]$EvaluatedProperties.TargetFrameworks).Split(';') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-    }
-
-    $IsSDKWithFramework = $false
-    foreach ($TargetFramework in $TargetFrameworks)
-    {
-        if ($TargetFramework.ToLowerInvariant() -in @('net20', 'net35', 'net40', 'net403', 'net45', 'net451', 'net452', 'net46', 'net461', 'net462', 'net47', 'net471', 'net472', 'net48', 'net481'))
-        {
-            $IsSDKWithFramework = $true
-            break
-        }
-    }
-
-    $IsTestProject = $IsSDKProj -and [string]::Equals([string]$EvaluatedProperties.IsTestProject, 'true', [System.StringComparison]::OrdinalIgnoreCase)
-    $IsPackable = $IsSDKProj -and [string]::Equals([string]$EvaluatedProperties.IsPackable, 'true', [System.StringComparison]::OrdinalIgnoreCase)
-    $IsPublishable = $IsSDKProj -and [string]::Equals([string]$EvaluatedProperties.IsPublishable, 'true', [System.StringComparison]::OrdinalIgnoreCase)
-    $IsCicdEnabled = -not [string]::Equals([string]$EvaluatedProperties.IsCicdEnabled, 'false', [System.StringComparison]::OrdinalIgnoreCase)
-
-    # A configured GitVersionBaseDirectory is the opt-in marker used by the repository templates.
-    $GitVersionBaseDirectory = [string]$EvaluatedProperties.GitVersionBaseDirectory
-    $UsesNerdbankGitVersioning = -not [string]::IsNullOrWhiteSpace(([string]$GitVersionBaseDirectory).Trim())
-
-    if ($UsesNerdbankGitVersioning)
-    {
-        # GetBuildVersion is supplied by Nerdbank.GitVersioning. No TargetFramework override
-        # is used because that would reduce a multi-target project's project.assets.json.
-        $VersionOutput = Invoke-ProcessTyped `
-            -Executable 'dotnet' `
-            -Arguments @(
-                'restore',
-                $ProjectFileInfo.FullName,
-                '-nologo',
-                '-t:GetBuildVersion',
-                '-getProperty:NuGetPackageVersion',
-                '-getProperty:AssemblyInformationalVersion',
-                '-getProperty:BuildVersionSimple'
-            ) `
-            -CommonArguments $CommonArguments `
-            -ReturnType Text `
-            -CaptureOutput $true
-
-        try
-        {
-            $VersionProperties = ($VersionOutput | ConvertFrom-Json -ErrorAction Stop).Properties
-        }
-        catch
-        {
-            throw "Nerdbank.GitVersioning returned invalid version data for '$($ProjectFileInfo.FullName)': $($_.Exception.Message)"
-        }
-
-        $NuGetPackageVersion = [string]$VersionProperties.NuGetPackageVersion
-        if ([string]::IsNullOrWhiteSpace($NuGetPackageVersion))
-        {
-            throw "Nerdbank.GitVersioning did not calculate NuGetPackageVersion for '$($ProjectFileInfo.FullName)'."
-        }
-
-        $VersionSource = 'Nerdbank.GitVersioning'
-        $OutputVersion = $NuGetPackageVersion
-        $AssemblyInformationalVersion = [string]$VersionProperties.AssemblyInformationalVersion
-        $BuildVersionSimple = [string]$VersionProperties.BuildVersionSimple
-    }
-    else
-    {
-        $VersionSource = 'GeneratedVersion'
-        $OutputVersion = [string]$GeneratedVersion.VersionFull
-        $NuGetPackageVersion = $OutputVersion
-        if (-not [string]::IsNullOrWhiteSpace($GeneratedVersionSuffix))
-        {
-            $NuGetPackageVersion = "$NuGetPackageVersion$GeneratedVersionSuffix"
-        }
-        $AssemblyInformationalVersion = $NuGetPackageVersion
-        $BuildVersionSimple = $OutputVersion
-    }
-
-    return [pscustomobject]@{
-        IsSDKProj                     = $IsSDKProj
-        IsNoneSDKProj                 = $IsNoneSDKProj
-        IsSDKWithFramework            = $IsSDKWithFramework
-        TargetFrameworkVersion        = [string]$EvaluatedProperties.TargetFrameworkVersion
-        TargetFrameworks              = $TargetFrameworks
-        IsTestProject                 = $IsTestProject
-        IsPackable                    = $IsPackable
-        IsPublishable                 = $IsPublishable
-        IsCicdEnabled                 = $IsCicdEnabled
-        Source                        = $VersionSource
-        UsesNerdbankGitVersioning     = $UsesNerdbankGitVersioning
-        OutputVersion                 = $OutputVersion
-        NuGetPackageVersion           = $NuGetPackageVersion
-        AssemblyInformationalVersion  = $AssemblyInformationalVersion
-        BuildVersionSimple            = $BuildVersionSimple
-    }
-}
-
 # Required for updating PowerShellGet and PackageManagement providers in local PowerShell 5.x environments
 Initialize-PowerShellMiniBootstrap
 
@@ -280,19 +128,15 @@ New-Directory -Paths @($OutputRootPath)
 # Delete clean the outputfolder
 if (-not $($RunEnvironment.IsCI)) { Remove-FilesByPattern -Path "$OutputRootPath" -Pattern "*"  }
 
-# Drops are disposable run output. Clear them before processing so local runs do not
-# retain obsolete aggregate versions and failed runs cannot leave a mixed snapshot.
-$Drop = "C:\temp\$GitRepositoryName-drops"
-New-Directory -Paths @($Drop)
-Remove-FilesByPattern -Path "$Drop" -Pattern "*"
-
-# The generated version remains available for legacy projects and aggregate file drops.
+$BranchVersionRelativePath = Get-Path -Paths @($BranchDeploymentConfig.Branch.PathSegmentsSanitized,$GeneratedVersion.VersionFull)
+$ChannelVersionRelativePath = Get-Path -Paths @($BranchDeploymentConfig.Channel.Value,$GeneratedVersion.VersionFull)
 $ChannelLatestRelativePath = Get-Path -Paths @($BranchDeploymentConfig.Channel.Value,"latest")
 
 # All required output folders
 $BuildRootPath = Get-Path -Paths @("$OutputRootPath","build")
 $BuildBinPath = Get-Path -Paths @("$BuildRootPath","bin")
 $BuildObjPath = Get-Path -Paths @("$BuildRootPath","obj")
+$TestObjPath = Get-Path -Paths @("$BuildRootPath","testobj")
 
 $PackRootPath = Get-Path -Paths @("$OutputRootPath","pack")
 $PublishRootPath = Get-Path -Paths @("$OutputRootPath","publish")
@@ -300,6 +144,7 @@ $RepoPublishRootPath = Get-Path -Paths @("$OutputRootPath","publish_repo")
 $SlnPublishRootPath = Get-Path -Paths @("$OutputRootPath","publish_sln")
 $ProjPublishRootPath = Get-Path -Paths @("$OutputRootPath","publish_proj")
 $ReportsRootPath =  Get-Path -Paths @("$OutputRootPath","reports")
+$DocsRootPath = Get-Path -Paths @("$OutputRootPath","docs")
 
 
 # Main pipeline preparation: discover every solution below src and resolve its projects.
@@ -317,9 +162,16 @@ $Vswhere = Find-FilesByPattern -Path "${env:ProgramFiles(x86)}\Microsoft Visual 
 $MsBuildVs = Invoke-ProcessTyped -Executable "$($Vswhere.FullName)" -Arguments @("-latest", "-products","*", "-requires","Microsoft.Component.MSBuild", "-find", "**\Bin\MSBuild.exe") -ReturnType Objects
 
 # Build, Test, Pack, Publish, and Generate Reports for each project in the solution.
-$ProjectVersionInfos = @{}
 foreach ($SolutionProjectPath in $SolutionProjectPaths) {
     foreach ($ProjectFileInfo in $SolutionProjectPath.Prj) {
+
+        # Create required output directories
+        New-Directory -Paths @($BuildRootPath)
+        $BuildBinDirectory = New-Directory -Paths @($BuildBinPath,$SolutionProjectPath.Sln.BaseName,$ProjectFileInfo.BaseName,$BranchVersionRelativePath)
+        $BuildObjDirectory = New-Directory -Paths @($BuildObjPath,$SolutionProjectPath.Sln.BaseName,$ProjectFileInfo.BaseName,$BranchVersionRelativePath)
+        $TestObjDirectory = New-Directory -Paths @($TestObjPath,$SolutionProjectPath.Sln.BaseName,$ProjectFileInfo.BaseName,$BranchVersionRelativePath)
+
+        # $DocsDirectory = New-Directory -Paths @($DocsRootPath,$SolutionProjectPath.Sln.BaseName,$ProjectFileInfo.BaseName,$ChannelVersionRelativePath)
 
         $DotnetCommonParameters = @(
             "-p:Configuration=Release",
@@ -327,87 +179,104 @@ foreach ($SolutionProjectPath in $SolutionProjectPaths) {
             "-v:minimal",
             "-p:Deterministic=true",
             "-p:ContinuousIntegrationBuild=true",
-            "-p:UseSharedCompilation=false",
-            "-m:1"
-        )
-
-        $GeneratedVersionParameters = @(
             "-p:VersionBuild=$($GeneratedVersion.VersionBuild)",
             "-p:VersionMajor=$($GeneratedVersion.VersionMajor)",
             "-p:VersionMinor=$($GeneratedVersion.VersionMinor)",
             "-p:VersionRevision=$($GeneratedVersion.VersionRevision)",
-            "-p:VersionSuffix=$($BranchDeploymentConfig.Affix.Suffix)"
+            "-p:VersionSuffix=$($BranchDeploymentConfig.Affix.Suffix)",
+            "-p:BaseOutputPath=$($BuildBinDirectory)/",
+            "-p:IntermediateOutputPath=$($BuildObjDirectory)/",
+            "-p:UseSharedCompilation=false",
+            "-m:1"
         )
 
-        # Determine the project state and perform the first restore.
-        $ProjectProperties = Restore-DotnetProjectProperties -ProjectFileInfo $ProjectFileInfo -CommonArguments $DotnetCommonParameters -GeneratedVersion $GeneratedVersion -GeneratedVersionSuffix ([string]$BranchDeploymentConfig.Affix.Suffix)
+        $NonSDKParameters = @(
+            "-p:Configuration=Release",
+            "-p:Platform=AnyCPU",
+            "-v:minimal",
+            "-p:VersionBuild=$($GeneratedVersion.VersionBuild)",
+            "-p:VersionMajor=$($GeneratedVersion.VersionMajor)",
+            "-p:VersionMinor=$($GeneratedVersion.VersionMinor)",
+            "-p:VersionRevision=$($GeneratedVersion.VersionRevision)",
+            "-p:VersionSuffix=$($BranchDeploymentConfig.Affix.Suffix)",
+            "-p:OutputPath=$($BuildBinDirectory)/",
+            "-p:BaseIntermediateOutputPath=$($BuildObjDirectory)/",
+            "-p:UseSharedCompilation=false"
+        )
 
-        $ProjectVersionParameters = @()
-        if ((-not $ProjectProperties.UsesNerdbankGitVersioning) -and (-not $ProjectProperties.IsTestProject))
-        {
-            $ProjectVersionParameters = $GeneratedVersionParameters
+        Invoke-ProcessTyped -Executable "drydock.exe" -Arguments @("csproj", "--location", "$($ProjectFileInfo.FullName)", "--property", "TargetFrameworkVersion") -ReturnType Objects -AllowedExitCodes @(0,-1) -CaptureOutput $false -CaptureOutputDump $true
+
+        $IsSDKProj = $false
+        $IsNoneSDKProj = $false
+        $IsSDKWithFramework = $false
+
+        if ($LASTEXITCODE -eq -1) {
+            $IsSDKProj = $true
+        } else {
+            $IsNoneSDKProj = $true
         }
 
-        $BuildPackPublishParameters = @($DotnetCommonParameters + $ProjectVersionParameters)
-
-        $ProjectVersionInfos[$ProjectFileInfo.FullName] = $ProjectProperties
-        Write-Output "Version for '$($ProjectFileInfo.BaseName)': $($ProjectProperties.NuGetPackageVersion) ($($ProjectProperties.Source))."
-
-        if (-not $ProjectProperties.IsCicdEnabled)
-        {
-            Write-Output "Skipping '$($ProjectFileInfo.BaseName)' because IsCicdEnabled is false."
-            continue
+        # TargetFrameworkVersion not found assume sdk project style and get TargetFramework
+        if ($IsSDKProj) {
+            $TargetFramework = Invoke-ProcessTyped -Executable "drydock.exe" -Arguments @("csproj", "--location", "$($ProjectFileInfo.FullName)", "--property", "TargetFramework") -ReturnType Objects -AllowedExitCodes @(0,-1)
+            if ($LASTEXITCODE -eq -1)
+            {
+                $TargetFrameworks = Invoke-ProcessTyped -Executable "drydock.exe" -Arguments @("csproj", "--location", "$($ProjectFileInfo.FullName)", "--property", "TargetFrameworks") -ReturnType Objects -AllowedExitCodes @(0)
+                $TargetFrameworks = $TargetFrameworks.Split(';')
+                foreach ($TargetFrame in $TargetFrameworks)
+                {
+                    if ($TargetFrame.Trim().ToLowerInvariant() -in @('net20', 'net35', 'net40', 'net403', 'net45', 'net451', 'net452', 'net46', 'net461', 'net462', 'net47', 'net471', 'net472', 'net48', 'net481'))
+                    {
+                        $IsSDKWithFramework = $true
+                        break;
+                    }
+                }
+            } elseif ($LASTEXITCODE -eq 0) {
+                $TargetFrameworks = @($TargetFramework)
+                if ($TargetFramework -in @('net20', 'net35', 'net40', 'net403', 'net45', 'net451', 'net452', 'net46', 'net461', 'net462', 'net47', 'net471', 'net472', 'net48', 'net481'))
+                {
+                   $IsSDKWithFramework = $true
+                }
+            }
         }
 
-        $ProjectChannelVersionRelativePath = Get-Path -Paths @($BranchDeploymentConfig.Channel.Value,$ProjectProperties.OutputVersion)
-
-        # Prepare legacy output paths and parameters before executing build steps.
-        if ($ProjectProperties.IsNoneSDKProj)
-        {
-            $ProjectBranchVersionRelativePath = Get-Path -Paths @($BranchDeploymentConfig.Branch.PathSegmentsSanitized,$ProjectProperties.OutputVersion)
-            New-Directory -Paths @($BuildRootPath)
-            $BuildBinDirectory = New-Directory -Paths @($BuildBinPath,$SolutionProjectPath.Sln.BaseName,$ProjectFileInfo.BaseName,$ProjectBranchVersionRelativePath)
-            $BuildObjDirectory = New-Directory -Paths @($BuildObjPath,$SolutionProjectPath.Sln.BaseName,$ProjectFileInfo.BaseName,$ProjectBranchVersionRelativePath)
-            $NonSDKParameters = @(
-                "-p:Configuration=Release",
-                "-p:Platform=AnyCPU",
-                "-v:minimal",
-                $ProjectVersionParameters
-                "-p:OutputPath=$($BuildBinDirectory)/",
-                "-p:BaseIntermediateOutputPath=$($BuildObjDirectory)/",
-                "-p:UseSharedCompilation=false"
-            )
-        }
-
-        # The version-resolution step performed the first restore. Complete the established
-        # restore-clean-restore sequence for a predictable incremental build state.
+        # Sequence for framework and dotnet core projects , restore,clean,restore needed for proper incremental build
+        Invoke-ProcessTyped -Executable "dotnet" -Arguments @("restore", "$($ProjectFileInfo.FullName)", "-p:Stage=restore") -ReturnType Objects -CommonArguments $DotnetCommonParameters
         Invoke-ProcessTyped -Executable "dotnet" -Arguments @("clean", "$($ProjectFileInfo.FullName)", "-p:Stage=clean") -ReturnType Objects -CommonArguments $DotnetCommonParameters
         Invoke-ProcessTyped -Executable "dotnet" -Arguments @("restore", "$($ProjectFileInfo.FullName)", "-p:Stage=restore") -ReturnType Objects -CommonArguments $DotnetCommonParameters
 
-        # Build Non-SDK projects with Visual Studio MSBuild.
-        if ($ProjectProperties.IsNoneSDKProj)
+        if ($IsNoneSDKProj)
         {
             Invoke-ProcessTyped -Executable "$MsBuildVs" -Arguments @("$($ProjectFileInfo.FullName)", "-p:Stage=build") -CommonArguments $NonSDKParameters -ReturnType Objects -CaptureOutput $true -CaptureOutputDump $false
         }
 
-        #SDK style build with frameworks requires msbuild to build the project, otherwise dotnet build is used for SDK style projects without frameworks
-        if ($ProjectProperties.IsSDKProj)
+        if ($IsSDKProj)
         {
-            if ($ProjectProperties.IsSDKWithFramework)
+            if ($IsSDKWithFramework)
             {
-                Invoke-ProcessTyped -Executable "$MsBuildVs" -Arguments @("/t:Build","$($ProjectFileInfo.FullName)", "-p:Stage=build")  -CommonArguments $BuildPackPublishParameters -ReturnType Objects -CaptureOutput $true -CaptureOutputDump $false
+                Invoke-ProcessTyped -Executable "$MsBuildVs" -Arguments @("/t:Build","$($ProjectFileInfo.FullName)", "-p:Stage=build")  -CommonArguments $DotnetCommonParameters -ReturnType Objects -CaptureOutput $true -CaptureOutputDump $false
             }
             else {
-                Invoke-ProcessTyped -Executable "dotnet" -Arguments @("build","$($ProjectFileInfo.FullName)", "-p:Stage=build")  -CommonArguments $BuildPackPublishParameters -ReturnType Objects -CaptureOutput $true -CaptureOutputDump $false
+                Invoke-ProcessTyped -Executable "dotnet" -Arguments @("build","$($ProjectFileInfo.FullName)", "-p:Stage=build")  -CommonArguments $DotnetCommonParameters -ReturnType Objects -CaptureOutput $true -CaptureOutputDump $false
             }
         }
 
-        # Report generation and license validation is only relevant for packable or publishable projects. Reports are generated after the build step to ensure the project.assets.json file is available for analysis.
-        if (($ProjectProperties.IsPackable -eq $true) -or ($ProjectProperties.IsPublishable -eq $true))
+        $IsTestProject = $false
+        $IsPackable = $false
+        $IsPublishable = $false
+        if ($IsSDKProj)
         {
-            $ReportsDirectory = New-Directory -Paths @($ReportsRootPath,$SolutionProjectPath.Sln.BaseName,$ProjectFileInfo.BaseName,$ProjectChannelVersionRelativePath)
+            $IsTestProject = Invoke-ProcessTyped -Executable "drydock.exe" -Arguments @("csproj", "--location", "$($ProjectFileInfo.FullName)", "--property", "IsTestProject") -ReturnType Objects
+            $IsPackable = Invoke-ProcessTyped -Executable "drydock.exe" -Arguments @("csproj", "--location", "$($ProjectFileInfo.FullName)", "--property", "IsPackable") -ReturnType Objects
+            $IsPublishable = Invoke-ProcessTyped -Executable "drydock.exe" -Arguments @("csproj", "--location", "$($ProjectFileInfo.FullName)", "--property", "IsPublishable") -ReturnType Objects
+        }
 
-            #Dependency-Health-and-Inventory.Report
+        # Report generation and license validation is only relevant for packable or publishable projects.
+        if (($IsPackable -eq $true) -or ($IsPublishable -eq $true))
+        {
+            $ReportsDirectory = New-Directory -Paths @($ReportsRootPath,$SolutionProjectPath.Sln.BaseName,$ProjectFileInfo.BaseName,$ChannelVersionRelativePath)
+
+            #Dependency-Health-and-Inventory.Report 
             $VulnerabilitiesJson = Invoke-ProcessTyped -Executable "dotnet" -Arguments @("list", "$($ProjectFileInfo.FullName)", "package", "--vulnerable", "--format", "json")
             New-DotnetVulnerabilitiesReport -jsonInput $VulnerabilitiesJson -OutputFile "$ReportsDirectory\Vulnerabilities.md" -OutputFormat markdown -ExitOnVulnerability $false
 
@@ -436,55 +305,45 @@ foreach ($SolutionProjectPath in $SolutionProjectPaths) {
         }
 
         # Test only executes for SDK-style projects. Non-SDK projects are not supported by dotnet test.
-        if ($ProjectProperties.IsTestProject -eq $true)
+        if ($IsTestProject -eq $true)
         {
-            Invoke-ProcessTyped -Executable "dotnet" -Arguments @("test", "$($ProjectFileInfo.FullName)", "-c", "Release", '-p:Stage=test' ) -CommonArguments $DotnetCommonParameters -CaptureOutput $false
+            foreach ($TestTargetFramework in $TargetFrameworks)
+            {
+                $TestCommonParameters = $DotnetCommonParameters -replace '^-p:IntermediateOutputPath=.*$', "-p:IntermediateOutputPath=$($TestObjDirectory)/$($TestTargetFramework)/"
+                Invoke-ProcessTyped -Executable "dotnet" -Arguments @("test", "$($ProjectFileInfo.FullName)", "-c", "Release", "-f", "$TestTargetFramework", '-p:Stage=test' ) -CommonArguments $TestCommonParameters -CaptureOutput $false
+            }
         }
 
-        if ($ProjectProperties.IsPackable -eq $true)
+        if ($IsPackable -eq $true)
         {
-            $PackDirectory = New-Directory -Paths @($PackRootPath,$SolutionProjectPath.Sln.BaseName,$ProjectFileInfo.BaseName,$ProjectChannelVersionRelativePath)
-            Invoke-ProcessTyped -Executable "dotnet" -Arguments @("pack", "$($ProjectFileInfo.FullName)", "-c", "Release","-p:""Stage=pack""","-p:""PackageOutputPath=$($PackDirectory)""")  -CommonArguments $BuildPackPublishParameters -CaptureOutput $false
+            $PackDirectory = New-Directory -Paths @($PackRootPath,$SolutionProjectPath.Sln.BaseName,$ProjectFileInfo.BaseName,$ChannelVersionRelativePath)
+            Invoke-ProcessTyped -Executable "dotnet" -Arguments @("pack", "$($ProjectFileInfo.FullName)", "-c", "Release","-p:""Stage=pack""","-p:""PackageOutputPath=$($PackDirectory)""")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
         }
 
-        if ($ProjectProperties.IsPublishable -eq $true)
+        if ($IsPublishable -eq $true)
         {
-            $PublishDirectory = New-Directory -Paths @($PublishRootPath,$SolutionProjectPath.Sln.BaseName,$ProjectFileInfo.BaseName,$ProjectChannelVersionRelativePath)
-            Invoke-ProcessTyped -Executable "dotnet" -Arguments @("publish", "$($ProjectFileInfo.FullName)", "-c", "Release","-p:""Stage=publish""","-p:""PublishDir=$($PublishDirectory)""")  -CommonArguments $BuildPackPublishParameters -CaptureOutput $false
+            $PublishDirectory = New-Directory -Paths @($PublishRootPath,$SolutionProjectPath.Sln.BaseName,$ProjectFileInfo.BaseName,$ChannelVersionRelativePath)
+            Invoke-ProcessTyped -Executable "dotnet" -Arguments @("publish", "$($ProjectFileInfo.FullName)", "-c", "Release","-p:""Stage=publish""","-p:""PublishDir=$($PublishDirectory)""")  -CommonArguments $DotnetCommonParameters -CaptureOutput $false
         }
 
-        if ($ProjectProperties.IsNoneSDKProj) {
-            $PublishDirectory = New-Directory -Paths @($PublishRootPath,$SolutionProjectPath.Sln.BaseName,$ProjectFileInfo.BaseName,$ProjectChannelVersionRelativePath)
+        if ($IsNoneSDKProj) {
+            $PublishDirectory = New-Directory -Paths @($PublishRootPath,$SolutionProjectPath.Sln.BaseName,$ProjectFileInfo.BaseName,$ChannelVersionRelativePath)
             Copy-FilesRecursively -SourceDirectory "$($BuildBinDirectory)" -DestinationDirectory "$($PublishDirectory)" -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination MirrorTree
         }
 
     }
 }
 
-# Select projects for file distribution. Pack-only projects keep their NuGet packages
-# and reports; they do not create publish trees or file drops.
-$PublishSolutionPaths = @()
-foreach ($SolutionProjectPath in $SolutionProjectPaths) {
-    $PublishProjects = @($SolutionProjectPath.Prj | Where-Object {
-        $Properties = $ProjectVersionInfos[$_.FullName]
-        $Properties.IsCicdEnabled -and (-not $Properties.IsTestProject) -and
-            ($Properties.IsPublishable -or $Properties.IsNoneSDKProj)
-    })
-    if ($PublishProjects.Count -gt 0) {
-        $PublishSolutionPaths += [pscustomobject]@{ Sln = $SolutionProjectPath.Sln; Prj = $PublishProjects }
-    }
-}
 
 # Enrich every project publish tree before creating distributable drops.
 # A repository can contain multiple solutions and every solution can contain multiple projects.
 # Their publish trees remain isolated as publish/<solution>/<project>/<channel>/<version>.
 # Compliance files are copied next to the binaries.
-foreach ($SolutionProjectPath in $PublishSolutionPaths) {
+foreach ($SolutionProjectPath in $SolutionProjectPaths) {
     foreach ($ProjectFileInfo in $SolutionProjectPath.Prj) {
         $SolutionFileInfo = $SolutionProjectPath.Sln
-            $ProjectChannelVersionRelativePath = Get-Path -Paths @($BranchDeploymentConfig.Channel.Value,$ProjectVersionInfos[$ProjectFileInfo.FullName].OutputVersion)
-            $PublishDirectory = New-Directory -Paths @($PublishRootPath,$SolutionFileInfo.BaseName,$ProjectFileInfo.BaseName,$ProjectChannelVersionRelativePath)
-            $ReportsDirectory = New-Directory -Paths @($ReportsRootPath,$SolutionFileInfo.BaseName,$ProjectFileInfo.BaseName,$ProjectChannelVersionRelativePath)
+            $PublishDirectory = New-Directory -Paths @($PublishRootPath,$SolutionFileInfo.BaseName,$ProjectFileInfo.BaseName,$ChannelVersionRelativePath)
+            $ReportsDirectory = New-Directory -Paths @($ReportsRootPath,$SolutionFileInfo.BaseName,$ProjectFileInfo.BaseName,$ChannelVersionRelativePath)
             Copy-FilesRecursively -SourceDirectory "$ReportsDirectory" -DestinationDirectory "$PublishDirectory" -Filter "LICENSE-*" -CopyEmptyDirs $false -ForceOverwrite $true
             Copy-FilesRecursively -SourceDirectory "$ReportsDirectory" -DestinationDirectory "$PublishDirectory" -Filter "SBOM-*" -CopyEmptyDirs $false -ForceOverwrite $true
             Remove-EmptyDirectories -Path "$(Get-Path -Paths @($PublishRootPath,$SolutionFileInfo.BaseName))" -RemoveRootIfEmpty
@@ -494,11 +353,10 @@ foreach ($SolutionProjectPath in $PublishSolutionPaths) {
 
 # Remove build-only symbol files from every enriched project publish tree.
 # All repository-, solution-, and project-level drops below are created from these cleaned trees.
-foreach ($SolutionProjectPath in $PublishSolutionPaths) {
+foreach ($SolutionProjectPath in $SolutionProjectPaths) {
     foreach ($ProjectFileInfo in $SolutionProjectPath.Prj) {
         $SolutionFileInfo = $SolutionProjectPath.Sln
-            $ProjectChannelVersionRelativePath = Get-Path -Paths @($BranchDeploymentConfig.Channel.Value,$ProjectVersionInfos[$ProjectFileInfo.FullName].OutputVersion)
-            $PublishDirectory = New-Directory -Paths @($PublishRootPath,$SolutionFileInfo.BaseName,$ProjectFileInfo.BaseName,$ProjectChannelVersionRelativePath)
+            $PublishDirectory = New-Directory -Paths @($PublishRootPath,$SolutionFileInfo.BaseName,$ProjectFileInfo.BaseName,$ChannelVersionRelativePath)
             Remove-FilesByPattern -Path "$PublishDirectory" -Pattern "*.pdb"
             Remove-EmptyDirectories -Path "$(Get-Path -Paths @($PublishRootPath,$SolutionFileInfo.BaseName))" -RemoveRootIfEmpty
      }
@@ -512,47 +370,43 @@ foreach ($SolutionProjectPath in $PublishSolutionPaths) {
 
 # Build the repository-level all-in-one drop by flattening the publish trees of every
 # project from every solution. Project output file names are therefore expected to be unique.
-if ($PublishSolutionPaths.Count -gt 0) {
-    $AggregateChannelVersionRelativePath = Get-Path -Paths @($BranchDeploymentConfig.Channel.Value,$GeneratedVersion.VersionFull)
-    $RepoPublishDirectory = New-Directory -Paths @($RepoPublishRootPath,$AggregateChannelVersionRelativePath)
-}
+$RepoPublishDirectory = New-Directory -Paths @($RepoPublishRootPath,$ChannelVersionRelativePath)
 
-foreach ($SolutionProjectPath in $PublishSolutionPaths) {
+foreach ($SolutionProjectPath in $SolutionProjectPaths) {
     $SolutionFileInfo = $SolutionProjectPath.Sln
     foreach ($ProjectFileInfo in $SolutionProjectPath.Prj) {
-            $ProjectChannelVersionRelativePath = Get-Path -Paths @($BranchDeploymentConfig.Channel.Value,$ProjectVersionInfos[$ProjectFileInfo.FullName].OutputVersion)
-            $PublishDirectory = New-Directory -Paths @($PublishRootPath,$SolutionFileInfo.BaseName,$ProjectFileInfo.BaseName,$ProjectChannelVersionRelativePath)
+            $PublishDirectory = New-Directory -Paths @($PublishRootPath,$SolutionFileInfo.BaseName,$ProjectFileInfo.BaseName,$ChannelVersionRelativePath)
             Copy-FilesRecursively -SourceDirectory "$PublishDirectory" -DestinationDirectory "$RepoPublishDirectory" -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true
             Remove-EmptyDirectories -Path "$(Get-Path -Paths @($PublishRootPath,$SolutionFileInfo.BaseName))" -RemoveRootIfEmpty
     }
 }
 
+
 ### FILE DROP SECTION
+$Drop = "C:\temp\$GitRepositoryName-drops"
 $RepositoryDropRootPath = "$Drop\rep"
 $SolutionsDropRootPath = "$Drop\sln"
 $ProjectsDropRootPath = "$Drop\prj"
 
-if ($PublishSolutionPaths.Count -gt 0) {
-    Copy-FilesRecursively -SourceDirectory "$RepoPublishDirectory" -DestinationDirectory (Get-Path -Paths @($RepositoryDropRootPath,$GitRepositoryName,$AggregateChannelVersionRelativePath)) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination MirrorTree
-    Copy-FilesRecursively -SourceDirectory "$RepoPublishDirectory" -DestinationDirectory (Get-Path -Paths @($RepositoryDropRootPath,$GitRepositoryName,$ChannelLatestRelativePath)) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination MirrorTree
-    Copy-FilesRecursively -SourceDirectory "$RepoPublishDirectory" -DestinationDirectory (Get-Path -Paths @($RepositoryDropRootPath,$GitRepositoryName,"distributed")) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination MirrorTree
-    $nugetFilePart1 = Join-Text -InputObject @("$($GitRepositoryName)","$($GeneratedVersion.VersionFull)") -Separator '.' -Normalization Trim
-    $nugetFileEmulation = Join-Text -InputObject @("$nugetFilePart1","$($BranchDeploymentConfig.Affix.Label)") -Separator '-' -Normalization Trim
-    Compress-Directory -SourceDirectory "$RepoPublishDirectory" -DestinationFile "$(Get-Path -Paths @($RepositoryDropRootPath,$GitRepositoryName,"zipped","$nugetFileEmulation.zip"))"
-}
+Copy-FilesRecursively -SourceDirectory "$RepoPublishDirectory" -DestinationDirectory (Get-Path -Paths @($RepositoryDropRootPath,$GitRepositoryName,$ChannelVersionRelativePath)) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination MirrorTree
+Copy-FilesRecursively -SourceDirectory "$RepoPublishDirectory" -DestinationDirectory (Get-Path -Paths @($RepositoryDropRootPath,$GitRepositoryName,$ChannelLatestRelativePath)) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination MirrorTree
+Copy-FilesRecursively -SourceDirectory "$RepoPublishDirectory" -DestinationDirectory (Get-Path -Paths @($RepositoryDropRootPath,$GitRepositoryName,"distributed")) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination MirrorTree
+$nugetFilePart1 = Join-Text -InputObject @("$($GitRepositoryName)","$($GeneratedVersion.VersionFull)") -Separator '.' -Normalization Trim
+$nugetFileEmulation = Join-Text -InputObject @("$nugetFilePart1","$($BranchDeploymentConfig.Affix.Label)") -Separator '-' -Normalization Trim
+Compress-Directory -SourceDirectory "$RepoPublishDirectory" -DestinationFile "$(Get-Path -Paths @($RepositoryDropRootPath,$GitRepositoryName,"zipped","$nugetFileEmulation.zip"))"
+
 
 # Build one solution-level drop by flattening all project publish trees belonging to that
 # solution. The solution staging directory is cleared first to prevent stale artifacts.
-foreach ($SolutionProjectPath in $PublishSolutionPaths) {
+foreach ($SolutionProjectPath in $SolutionProjectPaths) {
     $SolutionFileInfo = $SolutionProjectPath.Sln
-    $SolutionPublishDirectory = New-Directory -Paths @($SlnPublishRootPath,$SolutionFileInfo.BaseName,$AggregateChannelVersionRelativePath)
+    $SolutionPublishDirectory = New-Directory -Paths @($SlnPublishRootPath,$SolutionFileInfo.BaseName,$ChannelVersionRelativePath)
     Remove-FilesByPattern -Path "$SolutionPublishDirectory" -Pattern "*"
     foreach ($ProjectFileInfo in $SolutionProjectPath.Prj) {
-            $ProjectChannelVersionRelativePath = Get-Path -Paths @($BranchDeploymentConfig.Channel.Value,$ProjectVersionInfos[$ProjectFileInfo.FullName].OutputVersion)
-            $PublishDirectory = New-Directory -Paths @($PublishRootPath,$SolutionFileInfo.BaseName,$ProjectFileInfo.BaseName,$ProjectChannelVersionRelativePath)
+            $PublishDirectory = New-Directory -Paths @($PublishRootPath,$SolutionFileInfo.BaseName,$ProjectFileInfo.BaseName,$ChannelVersionRelativePath)
             Copy-FilesRecursively -SourceDirectory "$PublishDirectory" -DestinationDirectory "$SolutionPublishDirectory" -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true
     }
-    Copy-FilesRecursively -SourceDirectory "$SolutionPublishDirectory" -DestinationDirectory (Get-Path -Paths @($SolutionsDropRootPath,$SolutionFileInfo.BaseName,$AggregateChannelVersionRelativePath)) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination MirrorTree
+    Copy-FilesRecursively -SourceDirectory "$SolutionPublishDirectory" -DestinationDirectory (Get-Path -Paths @($SolutionsDropRootPath,$SolutionFileInfo.BaseName,$ChannelVersionRelativePath)) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination MirrorTree
     Copy-FilesRecursively -SourceDirectory "$SolutionPublishDirectory" -DestinationDirectory (Get-Path -Paths @($SolutionsDropRootPath,$SolutionFileInfo.BaseName,$ChannelLatestRelativePath)) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination MirrorTree
     Copy-FilesRecursively -SourceDirectory "$SolutionPublishDirectory" -DestinationDirectory (Get-Path -Paths @($SolutionsDropRootPath,$SolutionFileInfo.BaseName,"distributed")) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination MirrorTree
     $nugetFilePart1 = Join-Text -InputObject @("$($SolutionFileInfo.BaseName)","$($GeneratedVersion.VersionFull)") -Separator '.' -Normalization Trim
@@ -562,22 +416,22 @@ foreach ($SolutionProjectPath in $PublishSolutionPaths) {
 
 # Build one project-level drop for every solution/project association.
 # Project drops are keyed by project base name, which must be unique across the repository.
-foreach ($SolutionProjectPath in $PublishSolutionPaths) {
+foreach ($SolutionProjectPath in $SolutionProjectPaths) {
     $SolutionFileInfo = $SolutionProjectPath.Sln
     foreach ($ProjectFileInfo in $SolutionProjectPath.Prj) {
-            $ProjectVersionInfo = $ProjectVersionInfos[$ProjectFileInfo.FullName]
-            $ProjectChannelVersionRelativePath = Get-Path -Paths @($BranchDeploymentConfig.Channel.Value,$ProjectVersionInfo.OutputVersion)
-            $PublishDirectory = New-Directory -Paths @($PublishRootPath,$SolutionFileInfo.BaseName,$ProjectFileInfo.BaseName,$ProjectChannelVersionRelativePath)
-            $ProjPublishDirectory = New-Directory -Paths @($ProjPublishRootPath,$ProjectFileInfo.BaseName,$ProjectChannelVersionRelativePath)
+            $PublishDirectory = New-Directory -Paths @($PublishRootPath,$SolutionFileInfo.BaseName,$ProjectFileInfo.BaseName,$ChannelVersionRelativePath)
+            $ProjPublishDirectory = New-Directory -Paths @($ProjPublishRootPath,$ProjectFileInfo.BaseName,$ChannelVersionRelativePath)
             Copy-FilesRecursively -SourceDirectory "$PublishDirectory" -DestinationDirectory "$ProjPublishDirectory" -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true
-            Copy-FilesRecursively -SourceDirectory "$ProjPublishDirectory" -DestinationDirectory (Get-Path -Paths @($ProjectsDropRootPath,$ProjectFileInfo.BaseName,$ProjectChannelVersionRelativePath)) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination MirrorTree
+            Copy-FilesRecursively -SourceDirectory "$ProjPublishDirectory" -DestinationDirectory (Get-Path -Paths @($ProjectsDropRootPath,$ProjectFileInfo.BaseName,$ChannelVersionRelativePath)) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination MirrorTree
             Copy-FilesRecursively -SourceDirectory "$ProjPublishDirectory" -DestinationDirectory (Get-Path -Paths @($ProjectsDropRootPath,$ProjectFileInfo.BaseName,$ChannelLatestRelativePath)) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination MirrorTree
             Copy-FilesRecursively -SourceDirectory "$ProjPublishDirectory" -DestinationDirectory (Get-Path -Paths @($ProjectsDropRootPath,$ProjectFileInfo.BaseName,"distributed")) -Filter "*" -CopyEmptyDirs $false -ForceOverwrite $true -CleanDestination MirrorTree
-            $nugetFilePart1 = Join-Text -InputObject @("$($ProjectFileInfo.BaseName)","$($ProjectVersionInfo.OutputVersion)") -Separator '.' -Normalization Trim
+            $nugetFilePart1 = Join-Text -InputObject @("$($ProjectFileInfo.BaseName)","$($GeneratedVersion.VersionFull)") -Separator '.' -Normalization Trim
             $nugetFileEmulation = Join-Text -InputObject @("$nugetFilePart1","$($BranchDeploymentConfig.Affix.Label)") -Separator '-' -Normalization Trim
             Compress-Directory -SourceDirectory "$ProjPublishDirectory" -DestinationFile "$(Get-Path -Paths @($ProjectsDropRootPath,$ProjectFileInfo.BaseName,"zipped","$nugetFileEmulation.zip"))"
     }
 }
+
+exit
 
 # Resolving deployment information for the current branch
 $DeploymentChannel = $BranchDeploymentConfig.Channel.Value
@@ -635,7 +489,7 @@ if ($PushToGitHubSource -eq $true)
     $NuGetPackageFileInfos = Find-FilesByPattern -Path "$PackRootPath" -Pattern "*.nupkg"
     foreach ($NuGetPackageFileInfo in $NuGetPackageFileInfos)
     {
-        Invoke-ProcessTyped -Executable "dotnet" -Arguments @("nuget","push", "$($NuGetPackageFileInfo.FullName)", "--api-key", "$GitHubToken","--source","$GitHubSourceName","--skip-duplicate") -HideValues @($GitHubToken)
+        Invoke-ProcessTyped -Executable "dotnet" -Arguments @("nuget","push", "$($NuGetPackageFileInfo.FullName)", "--api-key", "$GitHubToken","--source","$GitHubSourceName") -HideValues @($GitHubToken)
     }
     Unregister-LocalNuGetDotNetPackageSource -SourceName "$GitHubSourceName"
 }
@@ -645,7 +499,7 @@ if ($PushToNuGetTest -eq $true)
     $NuGetPackageFileInfos = Find-FilesByPattern -Path "$PackRootPath" -Pattern "*.nupkg"
     foreach ($NuGetPackageFileInfo in $NuGetPackageFileInfos)
     {
-        Invoke-ProcessTyped -Executable "dotnet" -Arguments @("nuget","push", "$($NuGetPackageFileInfo.FullName)", "--api-key", "$IntTestNuGetApiKey","--source","$NuGetTestSourceUri","--skip-duplicate") -HideValues @($IntTestNuGetApiKey)
+        Invoke-ProcessTyped -Executable "dotnet" -Arguments @("nuget","push", "$($NuGetPackageFileInfo.FullName)", "--api-key", "$IntTestNuGetApiKey","--source","$NuGetTestSourceUri") -HideValues @($IntTestNuGetApiKey)
     }
 }
 
@@ -654,6 +508,6 @@ if ($PushToNuGetOrg -eq $true)
     $NuGetPackageFileInfos = Find-FilesByPattern -Path "$PackRootPath" -Pattern "*.nupkg"
     foreach ($NuGetPackageFileInfo in $NuGetPackageFileInfos)
     {
-        Invoke-ProcessTyped -Executable "dotnet" -Arguments @("nuget","push", "$($NuGetPackageFileInfo.FullName)", "--api-key", "$NuGetApiKey","--source","$NuGetOrgSourceUri","--skip-duplicate") -HideValues @($NuGetApiKey)
+        Invoke-ProcessTyped -Executable "dotnet" -Arguments @("nuget","push", "$($NuGetPackageFileInfo.FullName)", "--api-key", "$NuGetApiKey","--source","$NuGetOrgSourceUri") -HideValues @($NuGetApiKey)
     }
 }
